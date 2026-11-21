@@ -22,11 +22,7 @@ export const metadata: Metadata = {
     "Production-grade bilingual (English/Hindi) air quality intelligence platform for Delhi-NCR and urban India. Features dual-scale reality checks, diurnal exposure optimization, indoor mass balance physics, and community action bulletins.",
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html
       lang="en"

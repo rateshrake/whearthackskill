@@ -167,7 +167,10 @@ export function DualScaleCard({
                 <div className="text-xs font-bold text-slate-300 flex items-center justify-center gap-1">
                   {pollutant}
                   {isCritical && (
-                    <span className="h-1.5 w-1.5 rounded-full bg-cyan-400" title="Critical Pollutant" />
+                    <span
+                      className="h-1.5 w-1.5 rounded-full bg-cyan-400"
+                      title="Critical Pollutant"
+                    />
                   )}
                 </div>
                 <div className="text-lg font-mono font-extrabold text-white mt-0.5">

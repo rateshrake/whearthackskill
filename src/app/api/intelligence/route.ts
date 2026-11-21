@@ -13,7 +13,10 @@ const IntelligenceQuerySchema = z.object({
   lat: z
     .string({ message: "Latitude is required" })
     .min(1, "Latitude is required")
-    .refine((v) => !Number.isNaN(Number(v)) && v.trim() !== "", "Latitude must be a valid number")
+    .refine(
+      (v) => !Number.isNaN(Number(v)) && v.trim() !== "",
+      "Latitude must be a valid number",
+    )
     .transform((v) => Number(v))
     .pipe(
       z
@@ -24,7 +27,10 @@ const IntelligenceQuerySchema = z.object({
   lon: z
     .string({ message: "Longitude is required" })
     .min(1, "Longitude is required")
-    .refine((v) => !Number.isNaN(Number(v)) && v.trim() !== "", "Longitude must be a valid number")
+    .refine(
+      (v) => !Number.isNaN(Number(v)) && v.trim() !== "",
+      "Longitude must be a valid number",
+    )
     .transform((v) => Number(v))
     .pipe(
       z
@@ -34,12 +40,7 @@ const IntelligenceQuerySchema = z.object({
     ),
   lang: z.enum(["en", "hi"]).default("en"),
   archetype: z
-    .enum([
-      "child_asthma",
-      "older_adult_walker",
-      "office_commuter",
-      "general_adult",
-    ])
+    .enum(["child_asthma", "older_adult_walker", "office_commuter", "general_adult"])
     .default("child_asthma"),
 });
 
@@ -108,13 +109,11 @@ export async function GET(request: NextRequest) {
       cpcbCategory: payload.currentConditions.cpcb.category,
       usEpaAqi: payload.currentConditions.usEpa.aqi,
       usEpaCategory: payload.currentConditions.usEpa.category,
-      satisfactoryIllusionAlert:
-        payload.currentConditions.satisfactoryIllusionAlert,
+      satisfactoryIllusionAlert: payload.currentConditions.satisfactoryIllusionAlert,
       cleanestWindowTime: payload.diurnalAnalysis.cleanestToday
         ? `${payload.diurnalAnalysis.cleanestToday.startTimeIso.slice(11, 16)} - ${payload.diurnalAnalysis.cleanestToday.endTimeIso.slice(11, 16)} UTC`
         : "14:00 - 16:00",
-      cleanestWindowPm25:
-        payload.diurnalAnalysis.cleanestToday?.averagePm25 ?? 55.0,
+      cleanestWindowPm25: payload.diurnalAnalysis.cleanestToday?.averagePm25 ?? 55.0,
       worstWindowTime: payload.diurnalAnalysis.worstToday
         ? `${payload.diurnalAnalysis.worstToday.startTimeIso.slice(11, 16)} - ${payload.diurnalAnalysis.worstToday.endTimeIso.slice(11, 16)} UTC`
         : "06:00 - 08:00",

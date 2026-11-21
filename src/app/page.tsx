@@ -42,8 +42,7 @@ export default function VayuShieldHome() {
   });
 
   // 2. Intelligence & Advisor API State
-  const [intelligence, setIntelligence] =
-    useState<AirIntelligencePayload | null>(null);
+  const [intelligence, setIntelligence] = useState<AirIntelligencePayload | null>(null);
   const [advisor, setAdvisor] = useState<AdvisorExecutionResult | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -58,9 +57,9 @@ export default function VayuShieldHome() {
   // 3. Load Persistent State from localStorage on Mount
   useEffect(() => {
     try {
-      const savedLang = localStorage.getItem("vayushield_lang") as
-        | SupportedLanguage
-        | null;
+      const savedLang = localStorage.getItem(
+        "vayushield_lang",
+      ) as SupportedLanguage | null;
       if (savedLang === "en" || savedLang === "hi") {
         setLanguage(savedLang);
       }
@@ -70,9 +69,9 @@ export default function VayuShieldHome() {
         setSelectedCityId(savedCity);
       }
 
-      const savedArch = localStorage.getItem("vayushield_archetype") as
-        | HouseholdArchetype
-        | null;
+      const savedArch = localStorage.getItem(
+        "vayushield_archetype",
+      ) as HouseholdArchetype | null;
       if (
         savedArch === "child_asthma" ||
         savedArch === "older_adult_walker" ||
@@ -200,9 +199,7 @@ export default function VayuShieldHome() {
                     v1.0
                   </span>
                 </h1>
-                <p className="text-xs text-slate-400 font-medium">
-                  {t.app.subtitle}
-                </p>
+                <p className="text-xs text-slate-400 font-medium">{t.app.subtitle}</p>
               </div>
             </div>
 
@@ -268,9 +265,7 @@ export default function VayuShieldHome() {
             {/* Sync / Refresh Button */}
             <button
               type="button"
-              onClick={() =>
-                fetchIntelligence(activeCity, language)
-              }
+              onClick={() => fetchIntelligence(activeCity, language)}
               disabled={isLoading}
               className="p-2 rounded-xl text-slate-300 hover:text-white bg-slate-900 border border-slate-700 hover:border-slate-600 disabled:opacity-50 transition-all focus:outline-none focus:ring-2 focus:ring-teal-400"
               aria-label={isLoading ? t.app.refreshing : t.app.refreshButton}
@@ -362,7 +357,9 @@ export default function VayuShieldHome() {
                 </h2>
               </div>
               <span className="text-[11px] font-mono px-2.5 py-0.5 rounded-full bg-slate-800 text-teal-300 border border-slate-700 self-start sm:self-auto">
-                {advisor.isFallback ? "Deterministic Verified Guidance" : "Gemini 2.5 Guarded Guidance"}
+                {advisor.isFallback
+                  ? "Deterministic Verified Guidance"
+                  : "Gemini 2.5 Guarded Guidance"}
               </span>
             </div>
 
@@ -405,14 +402,10 @@ export default function VayuShieldHome() {
             satisfactoryIllusionAlert={
               intelligence.currentConditions.satisfactoryIllusionAlert
             }
-            scaleExplanation={
-              intelligence.currentConditions.scaleComparisonExplanation
-            }
+            scaleExplanation={intelligence.currentConditions.scaleComparisonExplanation}
             groundStation={intelligence.groundStation}
             pm25Concentration={intelligence.currentConditions.pm25}
-            humidityPct={
-              intelligence.diurnalAnalysis.observations48h[0]?.humidityPct
-            }
+            humidityPct={intelligence.diurnalAnalysis.observations48h[0]?.humidityPct}
             wasHumidityAdjusted={
               intelligence.diurnalAnalysis.cleanestToday?.wasHumidityAdjusted
             }

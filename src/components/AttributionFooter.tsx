@@ -104,8 +104,8 @@ export function AttributionFooter({ language }: AttributionFooterProps) {
         {/* Bottom copyright & tagline */}
         <div className="pt-6 border-t border-slate-800/80 flex flex-col sm:flex-row items-center justify-between gap-4 text-slate-400 text-[11px]">
           <div>
-            &copy; {new Date().getFullYear()} VayuShield &mdash; PromptWars Virtual Challenge 6.
-            Isomorphic Environmental Physics & Respiratory Protection.
+            &copy; {new Date().getFullYear()} VayuShield &mdash; PromptWars Virtual
+            Challenge 6. Isomorphic Environmental Physics & Respiratory Protection.
           </div>
           <div className="flex items-center gap-4">
             <span className="flex items-center gap-1 text-slate-400">

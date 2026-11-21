@@ -98,7 +98,7 @@ describe("Frontend UI Components Integration & Accessibility", () => {
       expect(html).toContain("India CPCB National AQI");
       expect(html).toContain("US EPA May 2024 Revised AQI");
       expect(html).toContain("MICRO-HOTSPOT DETECTED");
-      expect(html).toContain("aria-labelledby=\"dual-scale-heading\"");
+      expect(html).toContain('aria-labelledby="dual-scale-heading"');
     });
 
     it("renders dual scale comparison in Hindi", () => {
@@ -140,8 +140,8 @@ describe("Frontend UI Components Integration & Accessibility", () => {
       expect(html).toContain("Worst Peak Window (Today)");
       expect(html).toContain("Pulmonary Inhaled Dose Comparison");
       expect(html).toContain("Child with Asthma");
-      expect(html).toContain("aria-labelledby=\"diurnal-planner-heading\"");
-      expect(html).toContain("aria-live=\"polite\"");
+      expect(html).toContain('aria-labelledby="diurnal-planner-heading"');
+      expect(html).toContain('aria-live="polite"');
     });
 
     it("renders in Hindi with proper typography", () => {
@@ -169,7 +169,11 @@ describe("Frontend UI Components Integration & Accessibility", () => {
       const html = renderToString(
         <IndoorShelterCard
           outdoorPm25={180.0}
-          initialRoomDimensions={{ lengthMeters: 5.0, widthMeters: 4.0, heightMeters: 2.8 }}
+          initialRoomDimensions={{
+            lengthMeters: 5.0,
+            widthMeters: 4.0,
+            heightMeters: 2.8,
+          }}
           language="en"
         />,
       );
@@ -186,7 +190,11 @@ describe("Frontend UI Components Integration & Accessibility", () => {
       const html = renderToString(
         <IndoorShelterCard
           outdoorPm25={180.0}
-          initialRoomDimensions={{ lengthMeters: 4.0, widthMeters: 3.5, heightMeters: 3.0 }}
+          initialRoomDimensions={{
+            lengthMeters: 4.0,
+            widthMeters: 3.5,
+            heightMeters: 3.0,
+          }}
           language="hi"
         />,
       );
@@ -200,10 +208,7 @@ describe("Frontend UI Components Integration & Accessibility", () => {
   describe("UpwindContextCard", () => {
     it("renders upwind fire alignment and meteorological vectors in English", () => {
       const html = renderToString(
-        <UpwindContextCard
-          upwindContext={dummyUpwindContext}
-          language="en"
-        />,
+        <UpwindContextCard upwindContext={dummyUpwindContext} language="en" />,
       );
 
       expect(html).toContain("Upwind Satellite Thermal Anomalies &amp; Meteorology");
@@ -238,11 +243,7 @@ describe("Frontend UI Components Integration & Accessibility", () => {
   describe("CommunityHub", () => {
     it("renders GRAP Stage mandates and commute savings simulator in English", () => {
       const html = renderToString(
-        <CommunityHub
-          cpcbAqi={350}
-          outdoorPm25={180.0}
-          language="en"
-        />,
+        <CommunityHub cpcbAqi={350} outdoorPm25={180.0} language="en" />,
       );
 
       expect(html).toContain("Community &amp; Society Smog Action Hub");
@@ -259,11 +260,7 @@ describe("Frontend UI Components Integration & Accessibility", () => {
 
     it("renders statutory mandates in Hindi", () => {
       const html = renderToString(
-        <CommunityHub
-          cpcbAqi={425}
-          outdoorPm25={260.0}
-          language="hi"
-        />,
+        <CommunityHub cpcbAqi={425} outdoorPm25={260.0} language="hi" />,
       );
 
       expect(html).toContain("सामुदायिक व आरडब्ल्यूए (RWA) ग्रैप एक्शन हब");

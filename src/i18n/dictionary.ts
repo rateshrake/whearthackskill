@@ -378,7 +378,8 @@ export const DICTIONARY: Record<SupportedLanguage, TranslationDictionary> = {
       cpcbCategoryPrefix: "सीपीसीबी श्रेणी",
       epaHeader: "US EPA मई 2024 संशोधित एक्यूआई",
       epaCategoryPrefix: "यूएस ईपीए श्रेणी",
-      satisfactoryIllusionTitle: "सावधान: 'संतोषजनक वायु का भ्रम' (Satisfactory Illusion) सक्रिय",
+      satisfactoryIllusionTitle:
+        "सावधान: 'संतोषजनक वायु का भ्रम' (Satisfactory Illusion) सक्रिय",
       satisfactoryIllusionBody:
         "स्थानीय सीपीसीबी पैमाना इस हवा को 'संतोषजनक' या 'अच्छा' बताता है, लेकिन अंतरराष्ट्रीय स्वास्थ्य मानकों (US EPA 2024) के अनुसार यह 'संवेदनशील वर्गों के लिए अस्वास्थ्यकर' या हानिकारक है। दमा से पीड़ित बच्चों, बुजुर्गों और गर्भवती महिलाओं को सुरक्षित इनडोर वातावरण में रहना चाहिए।",
       subIndicesTitle: "छह प्रदूषकों का उप-सूचकांक (Sub-Indices)",
@@ -494,8 +495,7 @@ export const DICTIONARY: Record<SupportedLanguage, TranslationDictionary> = {
         "वायु गुणवत्ता पूर्वानुमान डेटा ओपन-मेटियो (Open-Meteo) व यूरोपीय संघ के कॉपरनिकस (CAMS) द्वारा (लाइसेंस CC BY 4.0)।",
       waqiCredit:
         "जमीनी स्टेशन डेटा वर्ल्ड एयर क्वालिटी इंडेक्स प्रोजेक्ट (WAQI/AQICN), केंद्रीय प्रदूषण नियंत्रण बोर्ड (CPCB) व राज्य प्रदूषण नियंत्रण बोर्डों द्वारा।",
-      openaqCredit:
-        "ओपनएक्यू (OpenAQ v3 API) वैश्विक वायु गुणवत्ता समुदाय द्वारा।",
+      openaqCredit: "ओपनएक्यू (OpenAQ v3 API) वैश्विक वायु गुणवत्ता समुदाय द्वारा।",
       nasaFirmsCredit:
         "उपग्रह थर्मल और सक्रिय आग डेटा नासा फर्म्स (NASA FIRMS / EOSDIS, NASA Earthdata) द्वारा।",
       googleMapsCredit:

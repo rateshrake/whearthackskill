@@ -295,14 +295,12 @@ export function DiurnalPlanner({
             {observations48h[selectedObsIndex].humidityPct !== undefined &&
               observations48h[selectedObsIndex].humidityPct! > 75 && (
                 <span className="text-amber-400 font-medium">
-                  {
-                    correctOpticalHygroscopicGrowth(
-                      observations48h[selectedObsIndex].pm25,
-                      observations48h[selectedObsIndex].humidityPct,
-                    ).wasAdjusted
-                      ? "Hygroscopic growth adjusted"
-                      : "Unadjusted"
-                  }
+                  {correctOpticalHygroscopicGrowth(
+                    observations48h[selectedObsIndex].pm25,
+                    observations48h[selectedObsIndex].humidityPct,
+                  ).wasAdjusted
+                    ? "Hygroscopic growth adjusted"
+                    : "Unadjusted"}
                 </span>
               )}
           </div>
@@ -319,36 +317,36 @@ export function DiurnalPlanner({
             {t.archetypeSelectorLabel}
           </label>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            {(
-              Object.keys(HOUSEHOLD_ARCHETYPES) as HouseholdArchetype[]
-            ).map((archKey) => {
-              const arch = HOUSEHOLD_ARCHETYPES[archKey];
-              const isSelected = selectedArchetype === archKey;
-              return (
-                <button
-                  key={archKey}
-                  type="button"
-                  id={`archetype-btn-${archKey}`}
-                  onClick={() => onArchetypeChange(archKey)}
-                  className={`p-3.5 rounded-xl border text-left transition-all ${
-                    isSelected
-                      ? "bg-teal-950/60 border-teal-500 shadow-md shadow-teal-950/40 text-white"
-                      : "bg-slate-900/60 border-slate-800 hover:border-slate-700 text-slate-300"
-                  }`}
-                  aria-pressed={isSelected}
-                >
-                  <div className="flex justify-between items-start gap-1">
-                    <span className="font-bold text-sm">{arch.label}</span>
-                    <span className="text-xs font-mono px-1.5 py-0.5 rounded bg-slate-800 text-teal-300">
-                      {arch.minuteVentilationLpm} L/min
-                    </span>
-                  </div>
-                  <p className="text-xs text-slate-400 mt-1 line-clamp-2 leading-relaxed">
-                    {arch.description}
-                  </p>
-                </button>
-              );
-            })}
+            {(Object.keys(HOUSEHOLD_ARCHETYPES) as HouseholdArchetype[]).map(
+              (archKey) => {
+                const arch = HOUSEHOLD_ARCHETYPES[archKey];
+                const isSelected = selectedArchetype === archKey;
+                return (
+                  <button
+                    key={archKey}
+                    type="button"
+                    id={`archetype-btn-${archKey}`}
+                    onClick={() => onArchetypeChange(archKey)}
+                    className={`p-3.5 rounded-xl border text-left transition-all ${
+                      isSelected
+                        ? "bg-teal-950/60 border-teal-500 shadow-md shadow-teal-950/40 text-white"
+                        : "bg-slate-900/60 border-slate-800 hover:border-slate-700 text-slate-300"
+                    }`}
+                    aria-pressed={isSelected}
+                  >
+                    <div className="flex justify-between items-start gap-1">
+                      <span className="font-bold text-sm">{arch.label}</span>
+                      <span className="text-xs font-mono px-1.5 py-0.5 rounded bg-slate-800 text-teal-300">
+                        {arch.minuteVentilationLpm} L/min
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-400 mt-1 line-clamp-2 leading-relaxed">
+                      {arch.description}
+                    </p>
+                  </button>
+                );
+              },
+            )}
           </div>
         </div>
 
@@ -376,7 +374,9 @@ export function DiurnalPlanner({
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div className="p-3 bg-slate-950/60 rounded-lg border border-slate-800/80">
-                <span className="text-xs text-slate-400 block">{t.baselineDoseLabel}</span>
+                <span className="text-xs text-slate-400 block">
+                  {t.baselineDoseLabel}
+                </span>
                 <span className="text-lg md:text-xl font-mono font-extrabold text-rose-300 mt-0.5 block">
                   {doseComparison.baselineDoseUg} µg
                 </span>
@@ -419,7 +419,10 @@ export function DiurnalPlanner({
             </div>
 
             <div className="text-xs text-teal-200/90 font-medium bg-teal-950/40 border border-teal-800/50 p-3 rounded-lg flex items-start gap-2">
-              <Info className="h-4 w-4 text-teal-400 flex-shrink-0 mt-0.5" aria-hidden="true" />
+              <Info
+                className="h-4 w-4 text-teal-400 flex-shrink-0 mt-0.5"
+                aria-hidden="true"
+              />
               <span>{doseComparison.clinicalSignificance}</span>
             </div>
           </div>
@@ -428,7 +431,10 @@ export function DiurnalPlanner({
 
       {/* Nocturnal Inversion Science Note */}
       <div className="p-4 rounded-xl bg-slate-950/50 border border-slate-800/70 text-xs text-slate-400 flex items-start gap-3">
-        <Wind className="h-5 w-5 text-slate-500 flex-shrink-0 mt-0.5" aria-hidden="true" />
+        <Wind
+          className="h-5 w-5 text-slate-500 flex-shrink-0 mt-0.5"
+          aria-hidden="true"
+        />
         <p className="leading-relaxed">{t.nocturnalInversionNote}</p>
       </div>
     </section>

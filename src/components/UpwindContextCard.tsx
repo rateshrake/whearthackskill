@@ -23,18 +23,29 @@ export interface UpwindContextCardProps {
  */
 function degToCardinal(deg: number): string {
   const directions = [
-    "N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE",
-    "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW",
+    "N",
+    "NNE",
+    "NE",
+    "ENE",
+    "E",
+    "ESE",
+    "SE",
+    "SSE",
+    "S",
+    "SSW",
+    "SW",
+    "WSW",
+    "W",
+    "WNW",
+    "NW",
+    "NNW",
   ];
   const normalized = ((deg % 360) + 360) % 360;
   const index = Math.round(normalized / 22.5) % 16;
   return directions[index] ?? "N";
 }
 
-export function UpwindContextCard({
-  upwindContext,
-  language,
-}: UpwindContextCardProps) {
+export function UpwindContextCard({ upwindContext, language }: UpwindContextCardProps) {
   const t = DICTIONARY[language].upwind;
   const cardinal = degToCardinal(upwindContext.windDirectionDeg);
 
@@ -90,7 +101,10 @@ export function UpwindContextCard({
             <p className="text-sm text-slate-400 mt-1">{t.description}</p>
           </div>
           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-950/80 text-amber-300 border border-amber-800/60 self-start md:self-auto">
-            <Radio className="h-3.5 w-3.5 text-amber-400 animate-pulse" aria-hidden="true" />
+            <Radio
+              className="h-3.5 w-3.5 text-amber-400 animate-pulse"
+              aria-hidden="true"
+            />
             NASA FIRMS (VIIRS SNPP NRT)
           </span>
         </div>
@@ -155,7 +169,10 @@ export function UpwindContextCard({
       >
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800/80 pb-3">
           <h3 className="font-bold text-white text-base flex items-center gap-2">
-            <AlignmentIcon className={`h-5 w-5 ${alignmentInfo.iconColor}`} aria-hidden="true" />
+            <AlignmentIcon
+              className={`h-5 w-5 ${alignmentInfo.iconColor}`}
+              aria-hidden="true"
+            />
             {t.dispersionOutlookTitle}
           </h3>
           <span
@@ -172,7 +189,10 @@ export function UpwindContextCard({
 
       {/* Scientific Causation Disclaimer */}
       <div className="p-4 rounded-xl bg-slate-950/50 border border-slate-800/70 text-xs text-slate-400 flex items-start gap-3">
-        <Info className="h-5 w-5 text-slate-500 flex-shrink-0 mt-0.5" aria-hidden="true" />
+        <Info
+          className="h-5 w-5 text-slate-500 flex-shrink-0 mt-0.5"
+          aria-hidden="true"
+        />
         <p className="leading-relaxed">
           <strong className="text-slate-300">Methodological Note: </strong>
           {t.scientificDisclaimer}

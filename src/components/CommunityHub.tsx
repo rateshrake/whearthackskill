@@ -115,7 +115,11 @@ export function CommunityHub({
               style={{ borderColor: grapStage.colorHex }}
               className="px-3.5 py-1.5 rounded-full text-xs font-mono font-bold bg-slate-950 text-white border shadow-sm flex items-center gap-2"
             >
-              <Shield className="h-3.5 w-3.5" style={{ color: grapStage.colorHex }} aria-hidden="true" />
+              <Shield
+                className="h-3.5 w-3.5"
+                style={{ color: grapStage.colorHex }}
+                aria-hidden="true"
+              />
               {grapStage.stageName} (AQI {grapStage.cpcbAqiRange})
             </span>
           </div>
@@ -178,7 +182,8 @@ export function CommunityHub({
               {t.carpoolSimulatorTitle}
             </h3>
             <p className="text-xs text-slate-400 mt-0.5">
-              Quantifies personal pulmonary protection and community vehicular decarbonization.
+              Quantifies personal pulmonary protection and community vehicular
+              decarbonization.
             </p>
           </div>
           <span className="text-xs font-mono px-2.5 py-1 rounded bg-indigo-950/60 text-indigo-300 border border-indigo-800/60 self-start sm:self-auto">
@@ -225,9 +230,7 @@ export function CommunityHub({
                 onChange={(e) => setBaselineMode(e.target.value as CommuteMode)}
                 className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white font-medium focus:ring-2 focus:ring-indigo-500"
               >
-                {(
-                  Object.keys(COMMUTE_MODE_PROFILES) as CommuteMode[]
-                ).map((modeKey) => (
+                {(Object.keys(COMMUTE_MODE_PROFILES) as CommuteMode[]).map((modeKey) => (
                   <option key={modeKey} value={modeKey}>
                     {COMMUTE_MODE_PROFILES[modeKey].label} (
                     {COMMUTE_MODE_PROFILES[modeKey].co2GramsPerKm} g CO2/km)
@@ -250,9 +253,7 @@ export function CommunityHub({
                 onChange={(e) => setChosenMode(e.target.value as CommuteMode)}
                 className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white font-medium focus:ring-2 focus:ring-indigo-500"
               >
-                {(
-                  Object.keys(COMMUTE_MODE_PROFILES) as CommuteMode[]
-                ).map((modeKey) => (
+                {(Object.keys(COMMUTE_MODE_PROFILES) as CommuteMode[]).map((modeKey) => (
                   <option key={modeKey} value={modeKey}>
                     {COMMUTE_MODE_PROFILES[modeKey].label} (
                     {COMMUTE_MODE_PROFILES[modeKey].co2GramsPerKm} g CO2/km)
@@ -317,7 +318,8 @@ export function CommunityHub({
               Verified Society Clean-Air Advisory
             </h3>
             <p className="text-xs text-slate-400 mt-0.5">
-              Ready-to-broadcast WhatsApp notice formatted with certified statutory mandates.
+              Ready-to-broadcast WhatsApp notice formatted with certified statutory
+              mandates.
             </p>
           </div>
 
@@ -368,7 +370,10 @@ export function CommunityHub({
 
       {/* Illegal Open Burning Citizen Hotline */}
       <div className="p-4 rounded-xl bg-slate-950/60 border border-amber-900/50 text-xs text-amber-200 flex items-start gap-3">
-        <PhoneCall className="h-5 w-5 text-amber-400 flex-shrink-0 mt-0.5" aria-hidden="true" />
+        <PhoneCall
+          className="h-5 w-5 text-amber-400 flex-shrink-0 mt-0.5"
+          aria-hidden="true"
+        />
         <p className="leading-relaxed font-medium">
           <strong className="text-amber-100">Citizen Air Protection: </strong>
           {t.openBurningHelpline}

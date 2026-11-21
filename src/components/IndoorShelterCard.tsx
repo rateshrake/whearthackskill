@@ -11,14 +11,7 @@ import {
   type RoomDimensions,
 } from "@/engine";
 import { DICTIONARY, type SupportedLanguage } from "@/i18n/dictionary";
-import {
-  Home,
-  Flame,
-  ShieldCheck,
-  AlertTriangle,
-  Info,
-  Layers,
-} from "lucide-react";
+import { Home, Flame, ShieldCheck, AlertTriangle, Info, Layers } from "lucide-react";
 
 export interface IndoorShelterCardProps {
   outdoorPm25: number;
@@ -56,10 +49,7 @@ export function IndoorShelterCard({
   const dimensions: RoomDimensions = { lengthMeters, widthMeters, heightMeters };
   const roomVolumeM3 = calculateRoomVolume(dimensions);
 
-  const handleDimensionChange = (
-    field: keyof RoomDimensions,
-    val: number,
-  ) => {
+  const handleDimensionChange = (field: keyof RoomDimensions, val: number) => {
     const updated = { ...dimensions, [field]: val };
     if (field === "lengthMeters") setLengthMeters(val);
     if (field === "widthMeters") setWidthMeters(val);
@@ -135,7 +125,9 @@ export function IndoorShelterCard({
                 <label htmlFor={lengthId} className="font-medium">
                   {t.lengthLabel}
                 </label>
-                <span className="font-mono text-sky-300">{lengthMeters.toFixed(1)} m</span>
+                <span className="font-mono text-sky-300">
+                  {lengthMeters.toFixed(1)} m
+                </span>
               </div>
               <input
                 id={lengthId}
@@ -177,7 +169,9 @@ export function IndoorShelterCard({
                 <label htmlFor={heightId} className="font-medium">
                   {t.heightLabel}
                 </label>
-                <span className="font-mono text-sky-300">{heightMeters.toFixed(1)} m</span>
+                <span className="font-mono text-sky-300">
+                  {heightMeters.toFixed(1)} m
+                </span>
               </div>
               <input
                 id={heightId}
@@ -211,7 +205,8 @@ export function IndoorShelterCard({
                 {t.targetCadrTitle}
               </h3>
               <p className="text-xs text-slate-400 mt-1">
-                Achieves ≤ 21% outdoor infiltration ratio ($C_{`{in}`} / C_{`{out}`} \le 0.21$)
+                Achieves ≤ 21% outdoor infiltration ratio ($C_{`{in}`} / C_{`{out}`} \le
+                0.21$)
               </p>
             </div>
             <span className="text-xs font-mono px-2.5 py-1 rounded bg-slate-800 text-slate-300 border border-slate-700">
@@ -252,7 +247,10 @@ export function IndoorShelterCard({
           </div>
 
           <div className="text-xs text-slate-300 bg-sky-950/30 border border-sky-800/40 p-3 rounded-lg flex items-start gap-2">
-            <Info className="h-4 w-4 text-sky-400 flex-shrink-0 mt-0.5" aria-hidden="true" />
+            <Info
+              className="h-4 w-4 text-sky-400 flex-shrink-0 mt-0.5"
+              aria-hidden="true"
+            />
             <span className="leading-relaxed">
               {targetCadr.isAchievableWithoutFilter
                 ? t.targetCadrAchieved
@@ -290,9 +288,7 @@ export function IndoorShelterCard({
           {/* 2. Open Windows */}
           <div className="space-y-1.5">
             <div className="flex justify-between text-xs">
-              <span className="font-medium text-slate-300">
-                2. {t.openWindowsLabel}
-              </span>
+              <span className="font-medium text-slate-300">2. {t.openWindowsLabel}</span>
               <span className="font-mono font-bold text-amber-300">
                 {openWindowsState.indoorPm25.toFixed(1)} µg/m³ (
                 {(openWindowsState.infiltrationRatio * 100).toFixed(0)}%)
@@ -333,7 +329,10 @@ export function IndoorShelterCard({
           <div className="space-y-1.5">
             <div className="flex justify-between text-xs">
               <span className="font-medium text-emerald-300 flex items-center gap-1.5">
-                <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" aria-hidden="true" />
+                <ShieldCheck
+                  className="h-3.5 w-3.5 text-emerald-400"
+                  aria-hidden="true"
+                />
                 4. {t.closedHepaLabel}
               </span>
               <span className="font-mono font-bold text-emerald-300">
@@ -361,9 +360,7 @@ export function IndoorShelterCard({
               <Flame className="h-5 w-5 text-rose-400" aria-hidden="true" />
               {t.combustionAuditTitle}
             </h3>
-            <p className="text-xs text-slate-400 mt-0.5">
-              {t.combustionAuditSubtitle}
-            </p>
+            <p className="text-xs text-slate-400 mt-0.5">{t.combustionAuditSubtitle}</p>
           </div>
           <span className="text-xs font-mono px-2.5 py-1 rounded bg-rose-950/60 text-rose-300 border border-rose-800/60 self-start sm:self-auto">
             Discrete Emission Physics
@@ -379,34 +376,36 @@ export function IndoorShelterCard({
             {t.triggerSelectLabel}
           </label>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            {(
-              Object.keys(COMBUSTION_EVENT_PROFILES) as CombustionEventType[]
-            ).map((evtKey) => {
-              const profile = COMBUSTION_EVENT_PROFILES[evtKey];
-              const isSelected = selectedCombustion === evtKey;
-              return (
-                <button
-                  key={evtKey}
-                  type="button"
-                  id={`combustion-btn-${evtKey}`}
-                  onClick={() => setSelectedCombustion(evtKey)}
-                  className={`p-3 rounded-xl border text-left transition-all ${
-                    isSelected
-                      ? "bg-rose-950/50 border-rose-500 text-white shadow-md shadow-rose-950/30"
-                      : "bg-slate-900/60 border-slate-800 text-slate-300 hover:border-slate-700"
-                  }`}
-                  aria-pressed={isSelected}
-                >
-                  <div className="font-bold text-xs flex items-center gap-1.5">
-                    <Flame className={`h-3.5 w-3.5 ${isSelected ? "text-rose-400" : "text-slate-500"}`} />
-                    {profile.label}
-                  </div>
-                  <div className="text-[11px] font-mono text-slate-400 mt-1">
-                    +{profile.peakSpikeAddedUgM3} µg/m³ peak spike
-                  </div>
-                </button>
-              );
-            })}
+            {(Object.keys(COMBUSTION_EVENT_PROFILES) as CombustionEventType[]).map(
+              (evtKey) => {
+                const profile = COMBUSTION_EVENT_PROFILES[evtKey];
+                const isSelected = selectedCombustion === evtKey;
+                return (
+                  <button
+                    key={evtKey}
+                    type="button"
+                    id={`combustion-btn-${evtKey}`}
+                    onClick={() => setSelectedCombustion(evtKey)}
+                    className={`p-3 rounded-xl border text-left transition-all ${
+                      isSelected
+                        ? "bg-rose-950/50 border-rose-500 text-white shadow-md shadow-rose-950/30"
+                        : "bg-slate-900/60 border-slate-800 text-slate-300 hover:border-slate-700"
+                    }`}
+                    aria-pressed={isSelected}
+                  >
+                    <div className="font-bold text-xs flex items-center gap-1.5">
+                      <Flame
+                        className={`h-3.5 w-3.5 ${isSelected ? "text-rose-400" : "text-slate-500"}`}
+                      />
+                      {profile.label}
+                    </div>
+                    <div className="text-[11px] font-mono text-slate-400 mt-1">
+                      +{profile.peakSpikeAddedUgM3} µg/m³ peak spike
+                    </div>
+                  </button>
+                );
+              },
+            )}
           </div>
         </div>
 
@@ -444,9 +443,7 @@ export function IndoorShelterCard({
 
             {/* HEPA Clearance */}
             <div className="p-3 bg-slate-950/70 rounded-lg border border-slate-800">
-              <span className="text-xs text-slate-400 block">
-                {t.clearanceTimeHepa}
-              </span>
+              <span className="text-xs text-slate-400 block">{t.clearanceTimeHepa}</span>
               <span className="text-lg md:text-xl font-mono font-extrabold text-emerald-400 mt-0.5 block">
                 {spikeEstimate.recoveryTimesMinutes.closedWindowsWithHepa} min
               </span>
@@ -457,9 +454,7 @@ export function IndoorShelterCard({
 
             {/* Window Flush Clearance */}
             <div className="p-3 bg-slate-950/70 rounded-lg border border-slate-800">
-              <span className="text-xs text-slate-400 block">
-                {t.clearanceTimeFlush}
-              </span>
+              <span className="text-xs text-slate-400 block">{t.clearanceTimeFlush}</span>
               <span className="text-lg md:text-xl font-mono font-extrabold text-sky-400 mt-0.5 block">
                 {spikeEstimate.recoveryTimesMinutes.openWindowsRapidFlush} min
               </span>
@@ -489,14 +484,20 @@ export function IndoorShelterCard({
           {/* Protective Protocol & Citation */}
           <div className="space-y-2 pt-2 border-t border-slate-800 text-xs">
             <div className="text-slate-300 flex items-start gap-2">
-              <AlertTriangle className="h-4 w-4 text-amber-400 flex-shrink-0 mt-0.5" aria-hidden="true" />
+              <AlertTriangle
+                className="h-4 w-4 text-amber-400 flex-shrink-0 mt-0.5"
+                aria-hidden="true"
+              />
               <span>
                 <strong className="text-amber-200">{t.safetyAdviceLabel}: </strong>
                 {spikeEstimate.protectiveAdvice}
               </span>
             </div>
             <div className="text-slate-400 flex items-start gap-2">
-              <Info className="h-4 w-4 text-slate-400 flex-shrink-0 mt-0.5" aria-hidden="true" />
+              <Info
+                className="h-4 w-4 text-slate-400 flex-shrink-0 mt-0.5"
+                aria-hidden="true"
+              />
               <span className="italic">
                 <strong className="not-italic text-slate-300">
                   {t.literatureCitationLabel}:{" "}
