@@ -11,7 +11,7 @@ import {
   type RoomDimensions,
 } from "@/engine";
 import { DICTIONARY, type SupportedLanguage } from "@/i18n/dictionary";
-import { Home, Flame, ShieldCheck, AlertTriangle, Info, Layers } from "lucide-react";
+import { Home, Flame, Layers, Wind } from "lucide-react";
 
 export interface IndoorShelterCardProps {
   outdoorPm25: number;
@@ -44,7 +44,6 @@ export function IndoorShelterCard({
   const lengthId = useId();
   const widthId = useId();
   const heightId = useId();
-  const combustionId = useId();
 
   const dimensions: RoomDimensions = { lengthMeters, widthMeters, heightMeters };
   const roomVolumeM3 = calculateRoomVolume(dimensions);
@@ -88,421 +87,286 @@ export function IndoorShelterCard({
   return (
     <section
       aria-labelledby="indoor-shelter-heading"
-      className="bg-slate-900/90 rounded-2xl border border-slate-800 p-6 md:p-8 shadow-xl space-y-6"
+      className="rounded-2xl border border-white/[0.08] bg-[#0d1017] p-6 md:p-8 shadow-2xl relative overflow-hidden space-y-6"
     >
+      {/* Subtle top edge specular highlight */}
+      <div className="absolute inset-x-0 top-0 h-[1px] bg-gradient-to-r from-transparent via-white/20 to-transparent" />
+
       {/* Header */}
-      <div className="border-b border-slate-800/80 pb-4">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-          <div>
-            <h2
-              id="indoor-shelter-heading"
-              className="text-xl md:text-2xl font-bold text-white tracking-tight flex items-center gap-2"
-            >
-              <Home className="h-6 w-6 text-sky-400" aria-hidden="true" />
-              {t.title}
-            </h2>
-            <p className="text-sm text-slate-400 mt-1">{t.description}</p>
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-white/[0.06] pb-5">
+        <div>
+          <div className="flex items-center gap-2 mb-1.5">
+            <span className="flex h-2 w-2 rounded-full bg-emerald-400" />
+            <span className="text-[11px] font-mono uppercase tracking-widest text-neutral-400 font-semibold">
+              First-Principles Microenvironment Physics
+            </span>
           </div>
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-sky-950/80 text-sky-300 border border-sky-800/60 self-start md:self-auto">
-            <Layers className="h-3.5 w-3.5 text-sky-400" aria-hidden="true" />
-            Steady-State Single-Zone Physics
+          <h2
+            id="indoor-shelter-heading"
+            className="text-2xl md:text-3xl font-bold text-white tracking-tight flex items-center gap-2.5"
+          >
+            <Home className="h-6 w-6 text-sky-400" aria-hidden="true" />
+            {t.title}
+          </h2>
+          <p className="text-sm text-neutral-400 mt-1 max-w-2xl leading-relaxed">
+            {t.description}
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2 text-xs font-mono text-neutral-300 bg-white/[0.03] border border-white/[0.08] px-3.5 py-1.5 rounded-xl self-start md:self-auto">
+          <Layers className="h-4 w-4 text-emerald-400" aria-hidden="true" />
+          <span>
+            Room Volume: <strong>{roomVolumeM3.toFixed(1)} m³</strong>
           </span>
         </div>
       </div>
 
-      {/* Room Dimensions & Target CADR Sizing */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Dimensions Controls */}
-        <div className="lg:col-span-1 p-5 rounded-xl bg-slate-950/80 border border-slate-800 space-y-4">
-          <h3 className="font-bold text-sm text-white tracking-wide flex items-center gap-2">
-            <Layers className="h-4 w-4 text-sky-400" aria-hidden="true" />
-            {t.roomDimensionsTitle}
-          </h3>
-
-          <div className="space-y-3 text-xs">
-            <div>
-              <div className="flex justify-between text-slate-300 mb-1">
-                <label htmlFor={lengthId} className="font-medium">
-                  {t.lengthLabel}
-                </label>
-                <span className="font-mono text-sky-300">
-                  {lengthMeters.toFixed(1)} m
-                </span>
-              </div>
-              <input
-                id={lengthId}
-                type="range"
-                min="2.0"
-                max="12.0"
-                step="0.5"
-                value={lengthMeters}
-                onChange={(e) =>
-                  handleDimensionChange("lengthMeters", parseFloat(e.target.value))
-                }
-                className="w-full accent-sky-400 cursor-pointer h-1.5 bg-slate-800 rounded-lg"
-              />
+      {/* Room Dimensions Sliders Grid */}
+      <div className="p-5 rounded-xl bg-white/[0.02] border border-white/[0.06] space-y-4">
+        <h3 className="text-xs font-mono uppercase tracking-wider text-neutral-400 font-semibold">
+          {t.roomDimensionsTitle}
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+          {/* Length */}
+          <div className="space-y-2">
+            <div className="flex justify-between text-xs font-mono">
+              <label htmlFor={lengthId} className="text-neutral-400 font-medium">
+                {t.lengthLabel}
+              </label>
+              <span className="text-white font-bold">{lengthMeters.toFixed(1)} m</span>
             </div>
-
-            <div>
-              <div className="flex justify-between text-slate-300 mb-1">
-                <label htmlFor={widthId} className="font-medium">
-                  {t.widthLabel}
-                </label>
-                <span className="font-mono text-sky-300">{widthMeters.toFixed(1)} m</span>
-              </div>
-              <input
-                id={widthId}
-                type="range"
-                min="2.0"
-                max="10.0"
-                step="0.5"
-                value={widthMeters}
-                onChange={(e) =>
-                  handleDimensionChange("widthMeters", parseFloat(e.target.value))
-                }
-                className="w-full accent-sky-400 cursor-pointer h-1.5 bg-slate-800 rounded-lg"
-              />
-            </div>
-
-            <div>
-              <div className="flex justify-between text-slate-300 mb-1">
-                <label htmlFor={heightId} className="font-medium">
-                  {t.heightLabel}
-                </label>
-                <span className="font-mono text-sky-300">
-                  {heightMeters.toFixed(1)} m
-                </span>
-              </div>
-              <input
-                id={heightId}
-                type="range"
-                min="2.2"
-                max="4.5"
-                step="0.1"
-                value={heightMeters}
-                onChange={(e) =>
-                  handleDimensionChange("heightMeters", parseFloat(e.target.value))
-                }
-                className="w-full accent-sky-400 cursor-pointer h-1.5 bg-slate-800 rounded-lg"
-              />
-            </div>
-          </div>
-
-          <div className="pt-3 border-t border-slate-800 flex justify-between items-center text-xs">
-            <span className="text-slate-400">{t.volumeLabel}</span>
-            <span className="font-mono font-bold text-white text-sm">
-              {roomVolumeM3.toFixed(1)} m³
-            </span>
-          </div>
-        </div>
-
-        {/* CADR Sizing Result */}
-        <div className="lg:col-span-2 p-5 rounded-xl bg-gradient-to-br from-slate-950 to-slate-900 border border-slate-800 space-y-4">
-          <div className="flex justify-between items-start gap-2">
-            <div>
-              <h3 className="font-bold text-sm text-white tracking-wide flex items-center gap-2">
-                <ShieldCheck className="h-4 w-4 text-emerald-400" aria-hidden="true" />
-                {t.targetCadrTitle}
-              </h3>
-              <p className="text-xs text-slate-400 mt-1">
-                Achieves ≤ 21% outdoor infiltration ratio ($C_{`{in}`} / C_{`{out}`} \le
-                0.21$)
-              </p>
-            </div>
-            <span className="text-xs font-mono px-2.5 py-1 rounded bg-slate-800 text-slate-300 border border-slate-700">
-              Outdoor: {outdoorPm25.toFixed(1)} µg/m³
-            </span>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div className="p-3 bg-slate-950/70 border border-slate-800/80 rounded-lg">
-              <span className="text-xs text-slate-400 block">Required CADR (m³/h)</span>
-              <span className="text-xl font-mono font-extrabold text-sky-300 mt-0.5 block">
-                {targetCadr.requiredCadrM3h} m³/h
-              </span>
-              <span className="text-[11px] text-slate-500 font-mono">
-                Clean Air Delivery Rate
-              </span>
-            </div>
-
-            <div className="p-3 bg-slate-950/70 border border-slate-800/80 rounded-lg">
-              <span className="text-xs text-slate-400 block">Required CADR (CFM)</span>
-              <span className="text-xl font-mono font-extrabold text-teal-300 mt-0.5 block">
-                {targetCadr.requiredCadrCfm} CFM
-              </span>
-              <span className="text-[11px] text-slate-500 font-mono">
-                Cubic Feet per Minute
-              </span>
-            </div>
-
-            <div className="p-3 bg-slate-950/70 border border-slate-800/80 rounded-lg">
-              <span className="text-xs text-slate-400 block">Required Purifier ACH</span>
-              <span className="text-xl font-mono font-extrabold text-emerald-300 mt-0.5 block">
-                {targetCadr.requiredAchHepa} ACH
-              </span>
-              <span className="text-[11px] text-slate-500 font-mono">
-                Air Changes per Hour
-              </span>
-            </div>
-          </div>
-
-          <div className="text-xs text-slate-300 bg-sky-950/30 border border-sky-800/40 p-3 rounded-lg flex items-start gap-2">
-            <Info
-              className="h-4 w-4 text-sky-400 flex-shrink-0 mt-0.5"
-              aria-hidden="true"
+            <input
+              id={lengthId}
+              type="range"
+              min="2.5"
+              max="12.0"
+              step="0.5"
+              value={lengthMeters}
+              onChange={(e) =>
+                handleDimensionChange("lengthMeters", parseFloat(e.target.value))
+              }
+              className="w-full"
+              aria-label={`${t.lengthLabel}: ${lengthMeters} m`}
             />
-            <span className="leading-relaxed">
-              {targetCadr.isAchievableWithoutFilter
-                ? t.targetCadrAchieved
-                : t.targetCadrNeeded
-                    .replace("{cadr}", targetCadr.requiredCadrM3h.toString())
-                    .replace("{cfm}", targetCadr.requiredCadrCfm.toString())
-                    .replace("{ach}", targetCadr.requiredAchHepa.toString())}
-            </span>
+          </div>
+
+          {/* Width */}
+          <div className="space-y-2">
+            <div className="flex justify-between text-xs font-mono">
+              <label htmlFor={widthId} className="text-neutral-400 font-medium">
+                {t.widthLabel}
+              </label>
+              <span className="text-white font-bold">{widthMeters.toFixed(1)} m</span>
+            </div>
+            <input
+              id={widthId}
+              type="range"
+              min="2.5"
+              max="10.0"
+              step="0.5"
+              value={widthMeters}
+              onChange={(e) =>
+                handleDimensionChange("widthMeters", parseFloat(e.target.value))
+              }
+              className="w-full"
+              aria-label={`${t.widthLabel}: ${widthMeters} m`}
+            />
+          </div>
+
+          {/* Height */}
+          <div className="space-y-2">
+            <div className="flex justify-between text-xs font-mono">
+              <label htmlFor={heightId} className="text-neutral-400 font-medium">
+                {t.heightLabel}
+              </label>
+              <span className="text-white font-bold">{heightMeters.toFixed(1)} m</span>
+            </div>
+            <input
+              id={heightId}
+              type="range"
+              min="2.4"
+              max="4.5"
+              step="0.1"
+              value={heightMeters}
+              onChange={(e) =>
+                handleDimensionChange("heightMeters", parseFloat(e.target.value))
+              }
+              className="w-full"
+              aria-label={`${t.heightLabel}: ${heightMeters} m`}
+            />
           </div>
         </div>
       </div>
 
-      {/* Comparison Bars: Outdoor vs Closed vs Closed + HEPA */}
-      <div className="p-6 rounded-xl bg-slate-950/80 border border-slate-800 space-y-5">
-        <h3 className="font-bold text-sm text-white tracking-wide">
+      {/* Steady-State Infiltration Regimes */}
+      <div className="space-y-3">
+        <h3 className="text-xs font-mono uppercase tracking-wider text-neutral-400 font-semibold">
           {t.comparisonBarsTitle}
         </h3>
-
-        <div className="space-y-4">
-          {/* 1. Outdoor Baseline */}
-          <div className="space-y-1.5">
-            <div className="flex justify-between text-xs">
-              <span className="font-medium text-slate-300">
-                1. {t.outdoorConcentrationLabel}
-              </span>
-              <span className="font-mono font-bold text-rose-300">
-                {outdoorPm25.toFixed(1)} µg/m³ (100%)
-              </span>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Regime 1: Open Windows */}
+          <div className="p-4 rounded-xl bg-rose-950/20 border border-rose-500/20 space-y-2">
+            <span className="text-xs font-mono font-bold uppercase tracking-wider text-rose-300 block">
+              {t.openWindowsLabel}
+            </span>
+            <div className="text-2xl font-mono font-bold text-white">
+              {openWindowsState.indoorPm25.toFixed(1)} µg/m³
             </div>
-            <div className="h-3 w-full bg-slate-800 rounded-full overflow-hidden">
-              <div className="h-full bg-rose-500 rounded-full w-full" />
-            </div>
-          </div>
-
-          {/* 2. Open Windows */}
-          <div className="space-y-1.5">
-            <div className="flex justify-between text-xs">
-              <span className="font-medium text-slate-300">2. {t.openWindowsLabel}</span>
-              <span className="font-mono font-bold text-amber-300">
-                {openWindowsState.indoorPm25.toFixed(1)} µg/m³ (
-                {(openWindowsState.infiltrationRatio * 100).toFixed(0)}%)
-              </span>
-            </div>
-            <div className="h-3 w-full bg-slate-800 rounded-full overflow-hidden">
-              <div
-                style={{
-                  width: `${Math.min(100, openWindowsState.infiltrationRatio * 100)}%`,
-                }}
-                className="h-full bg-amber-500 rounded-full transition-all duration-300"
-              />
+            <div className="text-xs text-neutral-400 font-mono">
+              Infiltration:{" "}
+              <strong className="text-rose-400">
+                {(openWindowsState.infiltrationRatio * 100).toFixed(0)}%
+              </strong>
             </div>
           </div>
 
-          {/* 3. Closed Windows Without Filter */}
-          <div className="space-y-1.5">
-            <div className="flex justify-between text-xs">
-              <span className="font-medium text-slate-300">
-                3. {t.closedNoFilterLabel}
-              </span>
-              <span className="font-mono font-bold text-amber-200">
-                {closedNoFilterState.indoorPm25.toFixed(1)} µg/m³ (
-                {(closedNoFilterState.infiltrationRatio * 100).toFixed(0)}%)
-              </span>
+          {/* Regime 2: Closed Windows, No Purifier */}
+          <div className="p-4 rounded-xl bg-amber-950/20 border border-amber-500/20 space-y-2">
+            <span className="text-xs font-mono font-bold uppercase tracking-wider text-amber-300 block">
+              {t.closedNoFilterLabel}
+            </span>
+            <div className="text-2xl font-mono font-bold text-white">
+              {closedNoFilterState.indoorPm25.toFixed(1)} µg/m³
             </div>
-            <div className="h-3 w-full bg-slate-800 rounded-full overflow-hidden">
-              <div
-                style={{
-                  width: `${Math.min(100, closedNoFilterState.infiltrationRatio * 100)}%`,
-                }}
-                className="h-full bg-amber-400 rounded-full transition-all duration-300"
-              />
+            <div className="text-xs text-neutral-400 font-mono">
+              Infiltration:{" "}
+              <strong className="text-amber-400">
+                {(closedNoFilterState.infiltrationRatio * 100).toFixed(0)}%
+              </strong>
             </div>
           </div>
 
-          {/* 4. Closed Windows + Sized HEPA Purifier */}
-          <div className="space-y-1.5">
-            <div className="flex justify-between text-xs">
-              <span className="font-medium text-emerald-300 flex items-center gap-1.5">
-                <ShieldCheck
-                  className="h-3.5 w-3.5 text-emerald-400"
-                  aria-hidden="true"
-                />
-                4. {t.closedHepaLabel}
-              </span>
-              <span className="font-mono font-bold text-emerald-300">
-                {closedHepaState.indoorPm25.toFixed(1)} µg/m³ (
-                {(closedHepaState.infiltrationRatio * 100).toFixed(0)}%)
-              </span>
+          {/* Regime 3: Closed Windows + HEPA Purifier */}
+          <div className="p-4 rounded-xl bg-emerald-950/20 border border-emerald-500/20 space-y-2">
+            <span className="text-xs font-mono font-bold uppercase tracking-wider text-emerald-300 block">
+              {t.closedHepaLabel}
+            </span>
+            <div className="text-2xl font-mono font-bold text-white">
+              {closedHepaState.indoorPm25.toFixed(1)} µg/m³
             </div>
-            <div className="h-3 w-full bg-slate-800 rounded-full overflow-hidden">
-              <div
-                style={{
-                  width: `${Math.min(100, closedHepaState.infiltrationRatio * 100)}%`,
-                }}
-                className="h-full bg-emerald-500 rounded-full transition-all duration-300"
-              />
+            <div className="text-xs text-neutral-400 font-mono">
+              Infiltration:{" "}
+              <strong className="text-emerald-400">
+                {(closedHepaState.infiltrationRatio * 100).toFixed(0)}%
+              </strong>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Discrete Indoor Combustion Spike Estimator */}
-      <div className="p-6 rounded-xl bg-slate-950/80 border border-slate-800 space-y-5">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
-          <div>
-            <h3 className="font-bold text-white text-base flex items-center gap-2">
-              <Flame className="h-5 w-5 text-rose-400" aria-hidden="true" />
-              {t.combustionAuditTitle}
+      {/* CADR Sizing & Recommendation Banner */}
+      <div className="p-5 rounded-xl bg-white/[0.02] border border-white/[0.08] space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <Wind className="h-4 w-4 text-sky-400" aria-hidden="true" />
+            <h3 className="text-xs font-mono uppercase tracking-wider text-neutral-300 font-bold">
+              {t.targetCadrTitle}
             </h3>
-            <p className="text-xs text-slate-400 mt-0.5">{t.combustionAuditSubtitle}</p>
           </div>
-          <span className="text-xs font-mono px-2.5 py-1 rounded bg-rose-950/60 text-rose-300 border border-rose-800/60 self-start sm:self-auto">
-            Discrete Emission Physics
+          <span className="text-[11px] font-mono text-neutral-400">
+            Target Infiltration: ≤ 21%
           </span>
         </div>
 
-        {/* Trigger Selection Tabs */}
-        <div>
-          <label
-            htmlFor={combustionId}
-            className="block text-xs font-semibold text-slate-300 mb-2"
-          >
-            {t.triggerSelectLabel}
-          </label>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            {(Object.keys(COMBUSTION_EVENT_PROFILES) as CombustionEventType[]).map(
-              (evtKey) => {
-                const profile = COMBUSTION_EVENT_PROFILES[evtKey];
-                const isSelected = selectedCombustion === evtKey;
-                return (
-                  <button
-                    key={evtKey}
-                    type="button"
-                    id={`combustion-btn-${evtKey}`}
-                    onClick={() => setSelectedCombustion(evtKey)}
-                    className={`p-3 rounded-xl border text-left transition-all ${
-                      isSelected
-                        ? "bg-rose-950/50 border-rose-500 text-white shadow-md shadow-rose-950/30"
-                        : "bg-slate-900/60 border-slate-800 text-slate-300 hover:border-slate-700"
-                    }`}
-                    aria-pressed={isSelected}
-                  >
-                    <div className="font-bold text-xs flex items-center gap-1.5">
-                      <Flame
-                        className={`h-3.5 w-3.5 ${isSelected ? "text-rose-400" : "text-slate-500"}`}
-                      />
-                      {profile.label}
-                    </div>
-                    <div className="text-[11px] font-mono text-slate-400 mt-1">
-                      +{profile.peakSpikeAddedUgM3} µg/m³ peak spike
-                    </div>
-                  </button>
-                );
-              },
-            )}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 font-mono text-xs pt-1">
+          <div className="bg-white/[0.02] p-3 rounded-lg border border-white/[0.04]">
+            <span className="text-neutral-400 block text-[10px] uppercase">
+              Clean Air Delivery
+            </span>
+            <strong className="text-white text-lg block mt-0.5">
+              {targetCadr.requiredCadrM3h.toFixed(0)} m³/h
+            </strong>
+            <span className="text-neutral-400 text-[10px]">Required CADR (m³/h)</span>
+          </div>
+          <div className="bg-white/[0.02] p-3 rounded-lg border border-white/[0.04]">
+            <span className="text-neutral-400 block text-[10px] uppercase">
+              Imperial CADR
+            </span>
+            <strong className="text-neutral-200 text-lg block mt-0.5">
+              {targetCadr.requiredCadrCfm.toFixed(0)} CFM
+            </strong>
+            <span className="text-neutral-400 text-[10px]">Imperial flow rate</span>
+          </div>
+          <div className="bg-white/[0.02] p-3 rounded-lg border border-white/[0.04]">
+            <span className="text-neutral-400 block text-[10px] uppercase">
+              Air Exchange Rate
+            </span>
+            <strong className="text-emerald-400 text-lg block mt-0.5">
+              {targetCadr.requiredAchHepa.toFixed(1)} ACH
+            </strong>
+            <span className="text-neutral-400 text-[10px]">Air changes per hour</span>
           </div>
         </div>
+      </div>
 
-        {/* Spike & Exponential Clearance Breakdown */}
-        <div
-          role="region"
-          aria-live="polite"
-          aria-label={t.combustionAuditTitle}
-          className="p-5 rounded-xl bg-slate-900/80 border border-slate-800 space-y-4"
-        >
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
-            {/* Peak Total Concentration */}
-            <div className="p-3 bg-slate-950/70 rounded-lg border border-slate-800">
-              <span className="text-xs text-slate-400 block">{t.acuteSpikeLabel}</span>
-              <span className="text-lg md:text-xl font-mono font-extrabold text-rose-400 mt-0.5 block">
-                {spikeEstimate.peakTotalIndoorPm25} µg/m³
-              </span>
-              <span className="text-[11px] text-slate-400 font-mono">
-                (+{spikeEstimate.peakSpikeConcentrationUgM3} µg/m³ spike)
-              </span>
-            </div>
+      {/* Acute Indoor Combustion Spike Audit */}
+      <div
+        role="region"
+        aria-label={t.combustionAuditTitle}
+        className="space-y-4 border-t border-white/[0.06] pt-6"
+      >
+        <div className="flex items-center gap-2">
+          <Flame className="h-4 w-4 text-amber-400" aria-hidden="true" />
+          <h3 className="text-xs font-mono uppercase tracking-wider text-neutral-400 font-semibold">
+            {t.combustionAuditTitle}
+          </h3>
+        </div>
 
-            {/* Natural Clearance */}
-            <div className="p-3 bg-slate-950/70 rounded-lg border border-slate-800">
-              <span className="text-xs text-slate-400 block">
-                {t.clearanceTimeClosed}
-              </span>
-              <span className="text-lg md:text-xl font-mono font-extrabold text-amber-300 mt-0.5 block">
-                {spikeEstimate.recoveryTimesMinutes.closedWindowsNoFilter} min
-              </span>
-              <span className="text-[11px] text-slate-400 font-mono">
-                Slow natural envelope loss
-              </span>
-            </div>
-
-            {/* HEPA Clearance */}
-            <div className="p-3 bg-slate-950/70 rounded-lg border border-slate-800">
-              <span className="text-xs text-slate-400 block">{t.clearanceTimeHepa}</span>
-              <span className="text-lg md:text-xl font-mono font-extrabold text-emerald-400 mt-0.5 block">
-                {spikeEstimate.recoveryTimesMinutes.closedWindowsWithHepa} min
-              </span>
-              <span className="text-[11px] text-emerald-400 font-mono">
-                Rapid mechanical removal
-              </span>
-            </div>
-
-            {/* Window Flush Clearance */}
-            <div className="p-3 bg-slate-950/70 rounded-lg border border-slate-800">
-              <span className="text-xs text-slate-400 block">{t.clearanceTimeFlush}</span>
-              <span className="text-lg md:text-xl font-mono font-extrabold text-sky-400 mt-0.5 block">
-                {spikeEstimate.recoveryTimesMinutes.openWindowsRapidFlush} min
-              </span>
-              <span className="text-[11px] text-slate-400 font-mono">
-                Cross-ventilation flush
-              </span>
-            </div>
-          </div>
-
-          {/* Chemical Hazards */}
-          <div className="space-y-1.5 text-xs">
-            <span className="font-semibold text-slate-300 block">
-              {t.chemicalHazardsLabel}
-            </span>
-            <div className="flex flex-wrap gap-1.5">
-              {spikeEstimate.event.chemicalHazards.map((hazard, hIdx) => (
-                <span
-                  key={hIdx}
-                  className="px-2.5 py-0.5 rounded-full bg-slate-800/90 text-slate-300 border border-slate-700 font-mono text-[11px]"
+        {/* Combustion Source Buttons */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {(Object.keys(COMBUSTION_EVENT_PROFILES) as CombustionEventType[]).map(
+            (cKey) => {
+              const profile = COMBUSTION_EVENT_PROFILES[cKey];
+              const isSelected = selectedCombustion === cKey;
+              return (
+                <button
+                  key={cKey}
+                  id={`combustion-btn-${cKey}`}
+                  type="button"
+                  aria-pressed={isSelected}
+                  onClick={() => setSelectedCombustion(cKey)}
+                  className={`p-3.5 rounded-xl text-left border transition-all ${
+                    isSelected
+                      ? "bg-amber-950/30 border-amber-500 text-white shadow-md"
+                      : "bg-white/[0.02] border-white/[0.06] text-neutral-400 hover:text-white hover:bg-white/[0.04]"
+                  }`}
                 >
-                  {hazard}
-                </span>
-              ))}
-            </div>
+                  <div className="font-semibold text-xs text-white">{profile.label}</div>
+                  <div className="text-[10px] font-mono text-neutral-400 mt-1">
+                    Peak: +{(profile.emissionRateUgPerMin / 1000).toFixed(1)} mg/min
+                    emission
+                  </div>
+                </button>
+              );
+            },
+          )}
+        </div>
+
+        {/* Selected Combustion Telemetry Card */}
+        <div className="p-4 rounded-xl bg-amber-950/20 border border-amber-500/20 space-y-2.5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-amber-500/20 pb-2">
+            <strong className="text-white text-sm">
+              {COMBUSTION_EVENT_PROFILES[selectedCombustion].label}
+            </strong>
+            <span className="text-[11px] font-mono text-amber-300">
+              Clearance Time to 90%:{" "}
+              <strong>
+                {spikeEstimate.recoveryTimesMinutes.closedWindowsWithHepa.toFixed(0)} min
+              </strong>
+            </span>
           </div>
 
-          {/* Protective Protocol & Citation */}
-          <div className="space-y-2 pt-2 border-t border-slate-800 text-xs">
-            <div className="text-slate-300 flex items-start gap-2">
-              <AlertTriangle
-                className="h-4 w-4 text-amber-400 flex-shrink-0 mt-0.5"
-                aria-hidden="true"
-              />
-              <span>
-                <strong className="text-amber-200">{t.safetyAdviceLabel}: </strong>
-                {spikeEstimate.protectiveAdvice}
-              </span>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs font-mono">
+            <div>
+              <span className="text-neutral-400 block">{t.acuteSpikeLabel}</span>
+              <strong className="text-rose-400 text-base">
+                +{spikeEstimate.peakSpikeConcentrationUgM3.toFixed(1)} µg/m³
+              </strong>
             </div>
-            <div className="text-slate-400 flex items-start gap-2">
-              <Info
-                className="h-4 w-4 text-slate-400 flex-shrink-0 mt-0.5"
-                aria-hidden="true"
-              />
-              <span className="italic">
-                <strong className="not-italic text-slate-300">
-                  {t.literatureCitationLabel}:{" "}
-                </strong>
-                {spikeEstimate.event.literatureCitation}
+            <div>
+              <span className="text-neutral-400 block">{t.literatureCitationLabel}</span>
+              <span className="text-amber-200 text-xs">
+                {COMBUSTION_EVENT_PROFILES[selectedCombustion].literatureCitation}
               </span>
             </div>
           </div>

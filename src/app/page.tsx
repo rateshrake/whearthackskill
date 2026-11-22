@@ -19,14 +19,14 @@ import type { AirIntelligencePayload } from "@/services/airQualityAggregator";
 import type { AdvisorExecutionResult } from "@/services/geminiAdvisor";
 import type { HouseholdArchetype, RoomDimensions } from "@/engine";
 import {
-  ShieldAlert,
   RefreshCw,
   Globe,
   Radio,
   MapPin,
-  Sparkles,
   AlertTriangle,
   ShieldCheck,
+  Stethoscope,
+  Activity,
 } from "lucide-react";
 
 export default function VayuShieldHome() {
@@ -174,32 +174,34 @@ export default function VayuShieldHome() {
   }, [activeCity, language, fetchIntelligence]);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-teal-500 selection:text-slate-950">
+    <div className="min-h-screen bg-[#08090d] text-neutral-100 flex flex-col font-sans selection:bg-sky-500/30 selection:text-white atmospheric-bg">
       {/* Skip Navigation Link for Accessibility */}
       <a
         href="#main-content"
-        className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-50 focus:px-4 focus:py-2 focus:bg-teal-500 focus:text-slate-950 focus:font-bold focus:rounded-md focus:shadow-xl focus:outline-none focus:ring-2 focus:ring-white"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-50 focus:px-4 focus:py-2 focus:bg-sky-500 focus:text-black focus:font-bold focus:rounded-md focus:shadow-xl focus:outline-none focus:ring-2 focus:ring-white"
       >
         Skip to main content
       </a>
 
-      {/* Semantic Header */}
-      <header className="border-b border-slate-800/80 bg-slate-950/95 backdrop-blur-md sticky top-0 z-40 transition-colors">
+      {/* High-Precision Instrument Header */}
+      <header className="border-b border-white/[0.08] bg-[#0c0e14]/90 backdrop-blur-xl sticky top-0 z-40 transition-colors">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 flex flex-col md:flex-row items-center justify-between gap-4">
-          {/* Brand & Status */}
+          {/* Wordmark & Subtitle */}
           <div className="flex items-center justify-between w-full md:w-auto gap-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-xl bg-teal-500/10 border border-teal-500/30 text-teal-400">
-                <ShieldAlert className="h-6 w-6" aria-hidden="true" />
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/[0.04] border border-white/[0.1] text-sky-400">
+                <Activity className="h-5 w-5" aria-hidden="true" />
               </div>
               <div>
-                <h1 className="text-xl font-extrabold text-white tracking-tight flex items-center gap-2">
-                  {t.app.title}
-                  <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full bg-slate-800 text-teal-300 border border-slate-700">
+                <h1 className="text-xl font-bold tracking-tight text-white flex items-center gap-2">
+                  <span>{t.app.title}</span>
+                  <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-white/[0.06] text-neutral-400 border border-white/[0.08]">
                     v1.0
                   </span>
                 </h1>
-                <p className="text-xs text-slate-400 font-medium">{t.app.subtitle}</p>
+                <p className="text-[11px] text-neutral-400 font-mono tracking-tight">
+                  {t.app.subtitle}
+                </p>
               </div>
             </div>
 
@@ -207,40 +209,40 @@ export default function VayuShieldHome() {
             <button
               type="button"
               onClick={handleLanguageToggle}
-              className="md:hidden px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-900 border border-slate-700 text-teal-300 hover:bg-slate-800 flex items-center gap-1.5"
+              className="md:hidden px-3 py-1.5 rounded-lg text-xs font-mono font-medium bg-white/[0.04] border border-white/[0.1] text-neutral-300 hover:text-white flex items-center gap-1.5"
               aria-label={t.app.languageToggle}
             >
-              <Globe className="h-3.5 w-3.5" aria-hidden="true" />
+              <Globe className="h-3.5 w-3.5 text-sky-400" aria-hidden="true" />
               {language === "en" ? "हिन्दी" : "EN"}
             </button>
           </div>
 
-          {/* City Selection & Connectivity State */}
+          {/* Controls: Station Telemetry, City Selector, Language */}
           <div className="flex flex-wrap items-center justify-end gap-3 w-full md:w-auto">
-            {/* Live Station / Cache Indicator */}
+            {/* Live Station / Cache Telemetry Dot */}
             <div
               role="status"
               aria-live="polite"
-              className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-mono bg-slate-900 border border-slate-800"
+              className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-mono bg-white/[0.03] border border-white/[0.08]"
             >
               <Radio
-                className={`h-3.5 w-3.5 ${
+                className={`h-3 w-3 ${
                   intelligence?.provenance.isCacheHit
                     ? "text-amber-400"
                     : "text-emerald-400 animate-pulse"
                 }`}
                 aria-hidden="true"
               />
-              <span className="text-slate-300">
+              <span className="text-neutral-300">
                 {intelligence?.provenance.isCacheHit
                   ? t.app.offlineIndicator
                   : t.app.liveIndicator}
               </span>
             </div>
 
-            {/* City Dropdown */}
-            <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-700 rounded-xl px-2.5 py-1">
-              <MapPin className="h-4 w-4 text-slate-400" aria-hidden="true" />
+            {/* City Dropdown Selector */}
+            <div className="flex items-center gap-1.5 bg-white/[0.03] border border-white/[0.08] hover:border-white/[0.14] transition-colors rounded-xl px-3 py-1.5">
+              <MapPin className="h-3.5 w-3.5 text-neutral-400" aria-hidden="true" />
               <label htmlFor={citySelectId} className="sr-only">
                 {t.app.citySelectorLabel}
               </label>
@@ -248,13 +250,13 @@ export default function VayuShieldHome() {
                 id={citySelectId}
                 value={selectedCityId}
                 onChange={(e) => handleCityChange(e.target.value)}
-                className="bg-transparent text-xs font-semibold text-white focus:outline-none cursor-pointer py-1 pr-2"
+                className="bg-transparent text-xs font-medium text-white focus:outline-none cursor-pointer pr-1"
               >
                 {CITY_PRESETS.map((city) => (
                   <option
                     key={city.id}
                     value={city.id}
-                    className="bg-slate-900 text-white"
+                    className="bg-[#0e1118] text-white"
                   >
                     {language === "hi" ? city.nameHi : city.nameEn}
                   </option>
@@ -267,12 +269,12 @@ export default function VayuShieldHome() {
               type="button"
               onClick={() => fetchIntelligence(activeCity, language)}
               disabled={isLoading}
-              className="p-2 rounded-xl text-slate-300 hover:text-white bg-slate-900 border border-slate-700 hover:border-slate-600 disabled:opacity-50 transition-all focus:outline-none focus:ring-2 focus:ring-teal-400"
+              className="p-2 rounded-xl text-neutral-400 hover:text-white bg-white/[0.03] border border-white/[0.08] hover:border-white/[0.14] disabled:opacity-50 transition-all focus:outline-none focus:ring-2 focus:ring-sky-400"
               aria-label={isLoading ? t.app.refreshing : t.app.refreshButton}
               title={t.app.refreshButton}
             >
               <RefreshCw
-                className={`h-4 w-4 ${isLoading ? "animate-spin text-teal-400" : ""}`}
+                className={`h-4 w-4 ${isLoading ? "animate-spin text-sky-400" : ""}`}
                 aria-hidden="true"
               />
             </button>
@@ -281,20 +283,20 @@ export default function VayuShieldHome() {
             <button
               type="button"
               onClick={handleLanguageToggle}
-              className="hidden md:flex px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-900 border border-slate-700 hover:border-slate-600 text-teal-300 hover:bg-slate-800 items-center gap-1.5 transition-all focus:outline-none focus:ring-2 focus:ring-teal-400"
+              className="hidden md:flex px-3.5 py-1.5 rounded-xl text-xs font-mono font-medium bg-white/[0.03] border border-white/[0.08] hover:border-white/[0.14] text-neutral-300 hover:text-white items-center gap-1.5 transition-all focus:outline-none focus:ring-2 focus:ring-sky-400"
               aria-label={t.app.languageToggle}
             >
-              <Globe className="h-3.5 w-3.5" aria-hidden="true" />
+              <Globe className="h-3.5 w-3.5 text-sky-400" aria-hidden="true" />
               {t.app.languageToggle}
             </button>
           </div>
         </div>
 
-        {/* Quick City Preset Pills */}
-        <div className="border-t border-slate-900 bg-slate-950/60 py-2 px-4 sm:px-6 lg:px-8 overflow-x-auto">
+        {/* Quick City Presets Strip */}
+        <div className="border-t border-white/[0.04] bg-white/[0.01] py-2 px-4 sm:px-6 lg:px-8 overflow-x-auto">
           <div className="max-w-7xl mx-auto flex items-center gap-2 text-xs">
-            <span className="text-slate-400 font-semibold select-none flex-shrink-0">
-              {t.app.quickPresets}
+            <span className="text-neutral-400 font-mono text-[11px] uppercase tracking-wider select-none flex-shrink-0">
+              {t.app.quickPresets}:
             </span>
             <div className="flex items-center gap-1.5">
               {CITY_PRESETS.map((city) => {
@@ -304,10 +306,10 @@ export default function VayuShieldHome() {
                     key={city.id}
                     type="button"
                     onClick={() => handleCityChange(city.id)}
-                    className={`px-2.5 py-1 rounded-lg text-[11px] font-medium whitespace-nowrap transition-all ${
+                    className={`px-3 py-1 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${
                       isActive
-                        ? "bg-teal-500/20 text-teal-300 border border-teal-500/40 font-bold"
-                        : "bg-slate-900 text-slate-400 border border-slate-800 hover:text-slate-200 hover:bg-slate-800"
+                        ? "bg-white/[0.1] text-white border border-white/[0.2] font-semibold"
+                        : "bg-white/[0.02] text-neutral-400 border border-white/[0.04] hover:text-white hover:bg-white/[0.06]"
                     }`}
                   >
                     {language === "hi" ? city.nameHi : city.nameEn}
@@ -322,59 +324,59 @@ export default function VayuShieldHome() {
       {/* Main Content Area */}
       <main
         id="main-content"
-        className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-10 flex-1 w-full"
+        className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8 flex-1 w-full"
       >
         {/* Error State Banner */}
         {error && (
           <div
             role="alert"
-            className="p-4 rounded-xl bg-rose-950/80 border border-rose-500 text-rose-200 flex items-center gap-3"
+            className="p-4 rounded-xl bg-rose-950/40 border border-rose-500/50 text-rose-200 flex items-center gap-3 shadow-lg"
           >
             <AlertTriangle className="h-5 w-5 text-rose-400 flex-shrink-0" />
-            <div className="text-xs">
+            <div className="text-xs font-mono">
               <strong className="font-bold">Sync Notice: </strong>
               {error}. Using deterministic local atmospheric physics fallback.
             </div>
           </div>
         )}
 
-        {/* AI & Certified Guarded Family Briefing Banner */}
+        {/* Clinical & Household Health Briefing Dispatch */}
         {advisor && (
           <section
             aria-labelledby="family-briefing-heading"
-            className="p-6 md:p-8 rounded-2xl bg-gradient-to-br from-slate-900 via-slate-900 to-teal-950/30 border border-teal-900/50 shadow-2xl relative overflow-hidden space-y-4"
+            className="p-6 md:p-7 rounded-2xl bg-[#0d1017] border border-white/[0.08] shadow-2xl relative overflow-hidden space-y-4"
           >
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800/80 pb-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-white/[0.06] pb-3">
               <div className="flex items-center gap-2.5">
-                <div className="p-1.5 rounded-lg bg-teal-500/10 border border-teal-500/30 text-teal-400">
-                  <Sparkles className="h-4 w-4" aria-hidden="true" />
+                <div className="p-1.5 rounded-lg bg-sky-500/10 text-sky-400">
+                  <Stethoscope className="h-4 w-4" aria-hidden="true" />
                 </div>
                 <h2
                   id="family-briefing-heading"
-                  className="text-base md:text-lg font-bold text-white tracking-wide"
+                  className="text-base md:text-lg font-bold text-white tracking-tight"
                 >
                   Clinical & Household Health Briefing
                 </h2>
               </div>
-              <span className="text-[11px] font-mono px-2.5 py-0.5 rounded-full bg-slate-800 text-teal-300 border border-slate-700 self-start sm:self-auto">
+              <span className="text-[11px] font-mono px-3 py-0.5 rounded-full bg-white/[0.04] text-neutral-400 border border-white/[0.08] self-start sm:self-auto">
                 {advisor.isFallback
                   ? "Deterministic Verified Guidance"
                   : "Gemini 2.5 Guarded Guidance"}
               </span>
             </div>
 
-            <p className="text-sm md:text-base text-slate-200 leading-relaxed font-normal">
+            <p className="text-sm md:text-base text-neutral-300 leading-relaxed font-normal">
               {advisor.output.familyBriefing}
             </p>
 
             {/* Protective Action Badges */}
-            <div className="pt-2 flex flex-wrap gap-2 text-xs">
+            <div className="pt-1 flex flex-wrap gap-2 text-xs">
               {advisor.output.topActionIds.map((actionId, aIdx) => (
                 <span
                   key={aIdx}
-                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-950/80 border border-teal-800/60 text-teal-300 font-mono text-xs shadow-sm"
+                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/[0.03] border border-white/[0.08] text-neutral-200 font-mono text-xs shadow-sm"
                 >
-                  <ShieldCheck className="h-3.5 w-3.5 text-teal-400" aria-hidden="true" />
+                  <ShieldCheck className="h-3.5 w-3.5 text-sky-400" aria-hidden="true" />
                   {actionId.replace(/_/g, " ")}
                 </span>
               ))}
@@ -382,15 +384,15 @@ export default function VayuShieldHome() {
           </section>
         )}
 
-        {/* Loading Indicator Overlay/Placeholder */}
+        {/* Loading Indicator Overlay */}
         {isLoading && !intelligence && (
           <div
             role="status"
             aria-live="polite"
-            className="p-12 text-center text-slate-400 space-y-3"
+            className="p-16 text-center text-neutral-400 space-y-3"
           >
-            <RefreshCw className="h-8 w-8 animate-spin mx-auto text-teal-400" />
-            <p className="text-sm font-medium">{t.app.refreshing}</p>
+            <RefreshCw className="h-8 w-8 animate-spin mx-auto text-sky-400" />
+            <p className="text-sm font-medium font-mono">{t.app.refreshing}</p>
           </div>
         )}
 

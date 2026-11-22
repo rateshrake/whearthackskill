@@ -8,9 +8,8 @@ import {
   Wind,
   Compass,
   AlertTriangle,
-  Info,
   ShieldCheck,
-  Radio,
+  Satellite,
 } from "lucide-react";
 
 export interface UpwindContextCardProps {
@@ -54,9 +53,9 @@ export function UpwindContextCard({ upwindContext, language }: UpwindContextCard
       case "upwind_aligned":
         return {
           title: "Upwind Plume Aligned",
-          badgeClass: "bg-orange-950/80 text-orange-300 border-orange-500/80",
+          badgeClass: "bg-amber-950/80 text-amber-300 border-amber-500/80",
           icon: AlertTriangle,
-          iconColor: "text-orange-400",
+          iconColor: "text-amber-400",
           explanation: t.alignmentUpwindAligned,
         };
       case "crosswind":
@@ -85,118 +84,123 @@ export function UpwindContextCard({ upwindContext, language }: UpwindContextCard
   return (
     <section
       aria-labelledby="upwind-context-heading"
-      className="bg-slate-900/90 rounded-2xl border border-slate-800 p-6 md:p-8 shadow-xl space-y-6"
+      className="rounded-2xl border border-white/[0.08] bg-[#0d1017] p-6 md:p-8 shadow-2xl relative overflow-hidden space-y-6"
     >
+      {/* Subtle top edge specular highlight */}
+      <div className="absolute inset-x-0 top-0 h-[1px] bg-gradient-to-r from-transparent via-white/20 to-transparent" />
+
       {/* Header */}
-      <div className="border-b border-slate-800/80 pb-4">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-          <div>
-            <h2
-              id="upwind-context-heading"
-              className="text-xl md:text-2xl font-bold text-white tracking-tight flex items-center gap-2"
-            >
-              <Flame className="h-6 w-6 text-amber-500" aria-hidden="true" />
-              {t.title}
-            </h2>
-            <p className="text-sm text-slate-400 mt-1">{t.description}</p>
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-white/[0.06] pb-5">
+        <div>
+          <div className="flex items-center gap-2 mb-1.5">
+            <span className="flex h-2 w-2 rounded-full bg-amber-400" />
+            <span className="text-[11px] font-mono uppercase tracking-widest text-neutral-400 font-semibold">
+              Remote Sensing & Boundary Trajectory
+            </span>
           </div>
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-950/80 text-amber-300 border border-amber-800/60 self-start md:self-auto">
-            <Radio
-              className="h-3.5 w-3.5 text-amber-400 animate-pulse"
-              aria-hidden="true"
-            />
-            NASA FIRMS (VIIRS SNPP NRT)
-          </span>
+          <h2
+            id="upwind-context-heading"
+            className="text-2xl md:text-3xl font-bold text-white tracking-tight flex items-center gap-2.5"
+          >
+            <Flame className="h-6 w-6 text-amber-400" aria-hidden="true" />
+            {t.title}
+          </h2>
+          <p className="text-sm text-neutral-400 mt-1 max-w-2xl leading-relaxed">
+            {t.description}
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2 text-xs font-mono text-neutral-300 bg-white/[0.03] border border-white/[0.08] px-3.5 py-1.5 rounded-xl self-start md:self-auto">
+          <Satellite className="h-4 w-4 text-sky-400" aria-hidden="true" />
+          <span>NASA FIRMS VIIRS S-NPP</span>
         </div>
       </div>
 
-      {/* Metrics Row */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {/* Active Fires Count */}
-        <div className="p-4 rounded-xl bg-slate-950/80 border border-slate-800 space-y-2">
-          <div className="flex items-center justify-between text-xs text-slate-400 font-semibold uppercase tracking-wider">
+      {/* Plume Alignment Classification Banner */}
+      <div className="p-4 md:p-5 rounded-xl bg-white/[0.02] border border-white/[0.08] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className={`p-2 rounded-lg bg-white/[0.04] ${alignmentInfo.iconColor}`}>
+            <AlignmentIcon className="h-5 w-5" aria-hidden="true" />
+          </div>
+          <div>
+            <div className="text-xs font-mono font-bold uppercase tracking-wider text-neutral-400">
+              {t.windVectorLabel}
+            </div>
+            <strong className="text-white text-base md:text-lg block mt-0.5">
+              {alignmentInfo.title}
+            </strong>
+          </div>
+        </div>
+
+        <span
+          className={`text-xs font-mono font-bold px-3 py-1 rounded-full border self-start sm:self-auto ${alignmentInfo.badgeClass}`}
+        >
+          {alignmentInfo.title}
+        </span>
+      </div>
+
+      {/* Satellite Telemetry Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 font-mono text-xs">
+        {/* Fire Count */}
+        <div className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.06] space-y-1">
+          <div className="flex items-center justify-between text-neutral-400 text-[10px] uppercase">
             <span>{t.satelliteFireCountLabel}</span>
             <Flame className="h-4 w-4 text-amber-400" aria-hidden="true" />
           </div>
-          <div className="text-2xl md:text-3xl font-mono font-extrabold text-white">
+          <div className="text-3xl font-light tracking-tight text-white">
             {upwindContext.fireHotspotCount}
           </div>
-          <div className="text-xs text-slate-400 font-mono">
+          <span className="text-[10px] text-neutral-400 block">
             Within ±1.5° regional bounding box
-          </div>
-        </div>
-
-        {/* Nearest Fire Distance */}
-        <div className="p-4 rounded-xl bg-slate-950/80 border border-slate-800 space-y-2">
-          <div className="flex items-center justify-between text-xs text-slate-400 font-semibold uppercase tracking-wider">
-            <span>{t.nearestFireDistanceLabel}</span>
-            <Compass className="h-4 w-4 text-sky-400" aria-hidden="true" />
-          </div>
-          <div className="text-2xl md:text-3xl font-mono font-extrabold text-white">
-            {upwindContext.nearestFireKm !== null
-              ? `${upwindContext.nearestFireKm.toFixed(1)} km`
-              : "None Detected"}
-          </div>
-          <div className="text-xs text-slate-400 font-mono">
-            Direct geodesic proximity
-          </div>
-        </div>
-
-        {/* Local Wind Vector */}
-        <div className="p-4 rounded-xl bg-slate-950/80 border border-slate-800 space-y-2">
-          <div className="flex items-center justify-between text-xs text-slate-400 font-semibold uppercase tracking-wider">
-            <span>{t.windVectorLabel}</span>
-            <Wind className="h-4 w-4 text-teal-400" aria-hidden="true" />
-          </div>
-          <div className="text-2xl md:text-3xl font-mono font-extrabold text-white flex items-center gap-2">
-            <span>{upwindContext.windSpeedKmh.toFixed(1)} km/h</span>
-            <span className="text-sm font-semibold text-teal-400 font-sans">
-              {cardinal} ({Math.round(upwindContext.windDirectionDeg)}°)
-            </span>
-          </div>
-          <div className="text-xs text-slate-400 font-mono">
-            Planetary boundary layer ground vector
-          </div>
-        </div>
-      </div>
-
-      {/* Dispersion Outlook Callout */}
-      <div
-        role="region"
-        aria-live="polite"
-        aria-label={t.dispersionOutlookTitle}
-        className="p-5 rounded-xl bg-slate-950/90 border border-slate-800 space-y-3"
-      >
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800/80 pb-3">
-          <h3 className="font-bold text-white text-base flex items-center gap-2">
-            <AlignmentIcon
-              className={`h-5 w-5 ${alignmentInfo.iconColor}`}
-              aria-hidden="true"
-            />
-            {t.dispersionOutlookTitle}
-          </h3>
-          <span
-            className={`text-xs px-3 py-1 rounded-full font-bold border self-start sm:self-auto ${alignmentInfo.badgeClass}`}
-          >
-            {alignmentInfo.title}
           </span>
         </div>
 
-        <p className="text-sm text-slate-300 leading-relaxed font-normal">
-          {alignmentInfo.explanation}
-        </p>
+        {/* Nearest Fire Proximity */}
+        <div className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.06] space-y-1">
+          <div className="flex items-center justify-between text-neutral-400 text-[10px] uppercase">
+            <span>{t.nearestFireDistanceLabel}</span>
+            <Compass className="h-4 w-4 text-sky-400" aria-hidden="true" />
+          </div>
+          <div className="text-3xl font-light tracking-tight text-white">
+            {upwindContext.nearestFireKm !== null
+              ? `${upwindContext.nearestFireKm.toFixed(1)} km`
+              : "None"}
+          </div>
+          <span className="text-[10px] text-neutral-400 block">
+            Geodesic proximity to coordinates
+          </span>
+        </div>
+
+        {/* Wind Vector */}
+        <div className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.06] space-y-1">
+          <div className="flex items-center justify-between text-neutral-400 text-[10px] uppercase">
+            <span>{t.windVectorLabel}</span>
+            <Wind className="h-4 w-4 text-emerald-400" aria-hidden="true" />
+          </div>
+          <div className="text-3xl font-light tracking-tight text-white">
+            {upwindContext.windSpeedKmh.toFixed(1)} km/h
+          </div>
+          <span className="text-[10px] text-neutral-400 block">
+            Direction: {upwindContext.windDirectionDeg.toFixed(0)}° ({cardinal})
+          </span>
+        </div>
       </div>
 
-      {/* Scientific Causation Disclaimer */}
-      <div className="p-4 rounded-xl bg-slate-950/50 border border-slate-800/70 text-xs text-slate-400 flex items-start gap-3">
-        <Info
-          className="h-5 w-5 text-slate-500 flex-shrink-0 mt-0.5"
-          aria-hidden="true"
-        />
-        <p className="leading-relaxed">
-          <strong className="text-slate-300">Methodological Note: </strong>
-          {t.scientificDisclaimer}
+      {/* Dispersion Outlook Region */}
+      <div
+        role="region"
+        aria-label={t.dispersionOutlookTitle}
+        className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.06] space-y-2 text-xs"
+      >
+        <span className="font-mono text-neutral-400 uppercase tracking-wider text-[10px] font-bold block">
+          {t.dispersionOutlookTitle}
+        </span>
+        <p className="text-neutral-300 leading-relaxed font-normal">
+          {alignmentInfo.explanation}
         </p>
+        <div className="text-[11px] text-neutral-400 font-mono pt-2 border-t border-white/[0.04]">
+          {upwindContext.scientificDisclaimer}
+        </div>
       </div>
     </section>
   );
