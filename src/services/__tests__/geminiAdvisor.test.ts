@@ -3,8 +3,27 @@ import {
   generateAdvisorBriefing,
   generateDeterministicFallback,
   containsNumericDigits,
+  DEFAULT_GEMINI_MODEL,
   type AdvisorMetricsInput,
 } from "../geminiAdvisor";
+import { resetAllCircuitBreakers } from "../resilientHttp";
+
+function createInteractionResponse(text: string): Response {
+  return new Response(
+    JSON.stringify({
+      id: "int_test_1",
+      status: "completed",
+      model: DEFAULT_GEMINI_MODEL,
+      steps: [
+        {
+          type: "model_output",
+          content: [{ type: "text", text }],
+        },
+      ],
+    }),
+    { status: 200, headers: { "Content-Type": "application/json" } },
+  );
+}
 
 describe("Service 4: geminiAdvisor & Guardrails", () => {
   const originalFetch = globalThis.fetch;
@@ -30,6 +49,7 @@ describe("Service 4: geminiAdvisor & Guardrails", () => {
 
   beforeEach(() => {
     process.env = { ...originalEnv };
+    resetAllCircuitBreakers();
   });
 
   afterEach(() => {
@@ -39,14 +59,16 @@ describe("Service 4: geminiAdvisor & Guardrails", () => {
   });
 
   describe("containsNumericDigits Helper", () => {
-    it("should detect numeric digits in strings, arrays, and objects", () => {
+    it("should detect ASCII and Unicode/Devanagari digits in strings, arrays, and objects", () => {
       expect(containsNumericDigits("PM2.5 is elevated")).toBe(true);
       expect(containsNumericDigits("AQI reached 142 today")).toBe(true);
+      expect(containsNumericDigits("प्रदूषण स्तर ४१२ है")).toBe(true);
       expect(containsNumericDigits(["action_one", "code_99"])).toBe(true);
       expect(containsNumericDigits({ text: "clean", sub: "value 1" })).toBe(true);
 
       // Clean non-digit text
       expect(containsNumericDigits("Severe air pollution alert")).toBe(false);
+      expect(containsNumericDigits("गंभीर वायु प्रदूषण चेतावनी")).toBe(false);
       expect(containsNumericDigits(["action_one", "action_two"])).toBe(false);
       expect(
         containsNumericDigits({
@@ -99,64 +121,95 @@ describe("Service 4: geminiAdvisor & Guardrails", () => {
     });
   });
 
-  describe("Critical Untrusted Output Guardrails", () => {
-    it("should reject Gemini response containing numeric digits and trigger deterministic fallback", async () => {
-      process.env.GEMINI_API_KEY = "mock_key";
+  describe("Critical Untrusted Output Guardrails & @google/genai Interactions SDK", () => {
+    it("should authenticate via header (never URL ?key=) and use gemini-4-hydrogen", async () => {
+      process.env.GEMINI_API_KEY = "mock_secret_key";
 
-      // Gemini hallucinates digits: e.g. "PM2.5 is 142"
-      globalThis.fetch = vi.fn().mockImplementation(() =>
-        Promise.resolve(
-          new Response(
-            JSON.stringify({
-              candidates: [
-                {
-                  content: {
-                    parts: [
-                      {
-                        text: JSON.stringify({
-                          topActionIds: ["action_hepa"],
-                          familyBriefing:
-                            "The PM2.5 level is 142 today so you must stay indoors.", // Contains digit '142'!
-                          rwaNoticeHeadline: "Pollution Alert",
-                          rwaNoticeBody: "Please comply with instructions.",
-                        }),
-                      },
-                    ],
-                  },
-                },
-              ],
-            }),
-            { status: 200, headers: { "Content-Type": "application/json" } },
-          ),
-        ),
-      );
+      let capturedUrl = "";
+      let capturedAuthHeader: string | null = null;
+      let capturedBodyText = "";
+
+      const validCleanJson = {
+        topActionIds: ["active_hepa_purifier", "respirator_mask_seal"],
+        familyBriefing:
+          "Severe air pollution alert. Sensitive family members must remain indoors with high efficiency filtration and shift essential walks to the cleanest afternoon window.",
+        rwaNoticeHeadline: "Official Notice: High Air Quality Alert",
+        rwaNoticeBody:
+          "All residents must suspend diesel generator usage and prohibit dry street sweeping across the residential society.",
+      };
+
+      globalThis.fetch = vi
+        .fn()
+        .mockImplementation(async (inputArg: RequestInfo | URL) => {
+          if (inputArg instanceof Request) {
+            capturedUrl = inputArg.url;
+            capturedAuthHeader = inputArg.headers.get("x-goog-api-key");
+            capturedBodyText = await inputArg.clone().text();
+          } else {
+            capturedUrl = inputArg.toString();
+          }
+          return createInteractionResponse(JSON.stringify(validCleanJson));
+        });
 
       const result = await generateAdvisorBriefing(mockInput);
 
-      expect(result.isFallback).toBe(true);
-      expect(result.fallbackReason).toContain("GUARDRAIL_DIGIT_REJECTION");
-      // Fallback is populated with certified numbers
-      expect(result.output.familyBriefing).toContain("412 (Severe)");
+      expect(result.isFallback).toBe(false);
+      expect(result.fallbackReason).toBeUndefined();
+      expect(result.output.familyBriefing).toBe(validCleanJson.familyBriefing);
+      expect(capturedUrl).toContain("/interactions");
+      expect(capturedUrl).not.toContain("mock_secret_key");
+      expect(capturedAuthHeader).toBe("mock_secret_key");
+      expect(capturedBodyText).toContain(DEFAULT_GEMINI_MODEL);
+    });
+
+    it("should reject Gemini response containing ASCII or Devanagari digits and trigger fallback", async () => {
+      process.env.GEMINI_API_KEY = "mock_key";
+
+      const resultAscii = await generateAdvisorBriefing(mockInput, {
+        interactionRunner: async () => ({
+          outputText: JSON.stringify({
+            topActionIds: ["action_hepa"],
+            familyBriefing:
+              "The particulate level is 142 today so you must stay indoors.",
+            rwaNoticeHeadline: "Pollution Alert",
+            rwaNoticeBody: "Please comply with clean air instructions.",
+          }),
+        }),
+      });
+
+      expect(resultAscii.isFallback).toBe(true);
+      expect(resultAscii.fallbackReason).toContain("GUARDRAIL_DIGIT_REJECTION");
+      expect(resultAscii.output.familyBriefing).toContain("412 (Severe)");
+
+      const resultDevanagari = await generateAdvisorBriefing(mockInput, {
+        interactionRunner: async () => ({
+          outputText: JSON.stringify({
+            topActionIds: ["action_hepa"],
+            familyBriefing: "आज वायु स्तर ४५० के पार है इसलिए घर के अंदर ही रहें।",
+            rwaNoticeHeadline: "वायु प्रदूषण चेतावनी",
+            rwaNoticeBody: "सभी निवासी नियमों का पालन करें।",
+          }),
+        }),
+      });
+
+      expect(resultDevanagari.isFallback).toBe(true);
+      expect(resultDevanagari.fallbackReason).toContain("GUARDRAIL_DIGIT_REJECTION");
     });
 
     it("should fallback cleanly when Gemini times out (> 3.5s)", async () => {
       process.env.GEMINI_API_KEY = "mock_key";
 
-      // Mock fetch simulating timeout abort
-      globalThis.fetch = vi.fn().mockImplementation((_url, init?: RequestInit) => {
-        return new Promise((_resolve, reject) => {
-          if (init?.signal) {
-            init.signal.addEventListener("abort", () => {
+      const result = await generateAdvisorBriefing(mockInput, {
+        timeoutMs: 50,
+        interactionRunner: async ({ signal }) =>
+          new Promise((_resolve, reject) => {
+            signal.addEventListener("abort", () => {
               const err = new Error("The operation was aborted");
               err.name = "AbortError";
               reject(err);
             });
-          }
-        });
+          }),
       });
-
-      // Pass short 50ms timeout for fast unit test
-      const result = await generateAdvisorBriefing(mockInput, { timeoutMs: 50 });
 
       expect(result.isFallback).toBe(true);
       expect(result.fallbackReason).toContain("TIMEOUT_EXCEEDED");
@@ -166,11 +219,14 @@ describe("Service 4: geminiAdvisor & Guardrails", () => {
     it("should fallback cleanly when Gemini returns HTTP 429 Rate Limit", async () => {
       process.env.GEMINI_API_KEY = "mock_key";
 
-      globalThis.fetch = vi
-        .fn()
-        .mockImplementation(() =>
-          Promise.resolve(new Response("RESOURCE_EXHAUSTED", { status: 429 })),
-        );
+      globalThis.fetch = vi.fn().mockImplementation(() =>
+        Promise.resolve(
+          new Response(JSON.stringify({ error: { message: "RESOURCE_EXHAUSTED" } }), {
+            status: 429,
+            headers: { "Content-Type": "application/json" },
+          }),
+        ),
+      );
 
       const result = await generateAdvisorBriefing(mockInput);
 
@@ -182,11 +238,14 @@ describe("Service 4: geminiAdvisor & Guardrails", () => {
     it("should fallback cleanly when Gemini returns HTTP 500 Server Error", async () => {
       process.env.GEMINI_API_KEY = "mock_key";
 
-      globalThis.fetch = vi
-        .fn()
-        .mockImplementation(() =>
-          Promise.resolve(new Response("Internal Server Error", { status: 500 })),
-        );
+      globalThis.fetch = vi.fn().mockImplementation(() =>
+        Promise.resolve(
+          new Response(JSON.stringify({ error: { message: "Internal Server Error" } }), {
+            status: 500,
+            headers: { "Content-Type": "application/json" },
+          }),
+        ),
+      );
 
       const result = await generateAdvisorBriefing(mockInput);
 
@@ -197,22 +256,13 @@ describe("Service 4: geminiAdvisor & Guardrails", () => {
     it("should fallback cleanly when Gemini returns malformed non-JSON text", async () => {
       process.env.GEMINI_API_KEY = "mock_key";
 
-      globalThis.fetch = vi.fn().mockImplementation(() =>
-        Promise.resolve(
-          new Response(
-            JSON.stringify({
-              candidates: [
-                {
-                  content: {
-                    parts: [{ text: "This is not valid JSON string at all" }],
-                  },
-                },
-              ],
-            }),
-            { status: 200 },
+      globalThis.fetch = vi
+        .fn()
+        .mockImplementation(() =>
+          Promise.resolve(
+            createInteractionResponse("This is not valid JSON string at all"),
           ),
-        ),
-      );
+        );
 
       const result = await generateAdvisorBriefing(mockInput);
       expect(result.isFallback).toBe(true);
@@ -224,24 +274,11 @@ describe("Service 4: geminiAdvisor & Guardrails", () => {
 
       globalThis.fetch = vi.fn().mockImplementation(() =>
         Promise.resolve(
-          new Response(
+          createInteractionResponse(
             JSON.stringify({
-              candidates: [
-                {
-                  content: {
-                    parts: [
-                      {
-                        text: JSON.stringify({
-                          topActionIds: [], // Empty array violates .min(1)
-                          familyBriefing: "Too short",
-                        }),
-                      },
-                    ],
-                  },
-                },
-              ],
+              topActionIds: [],
+              familyBriefing: "Too short",
             }),
-            { status: 200 },
           ),
         ),
       );
@@ -251,40 +288,24 @@ describe("Service 4: geminiAdvisor & Guardrails", () => {
       expect(result.fallbackReason).toContain("ZOD_SCHEMA_VIOLATION");
     });
 
-    it("should accept valid qualitative response with zero numeric digits", async () => {
+    it("should fallback immediately when circuit breaker is open after repeated failures", async () => {
       process.env.GEMINI_API_KEY = "mock_key";
 
-      const validCleanJson = {
-        topActionIds: ["active_hepa_purifier", "respirator_mask_seal"],
-        familyBriefing:
-          "Severe air pollution alert. Sensitive family members must remain indoors in rooms with high efficiency air filtration. Shift necessary walking to the afternoon clean ventilation window.",
-        rwaNoticeHeadline: "Official Notice: High Air Quality Alert",
-        rwaNoticeBody:
-          "All residents must suspend diesel generator usage and prohibit dry street sweeping across the residential society.",
-      };
+      for (let i = 0; i < 5; i++) {
+        await generateAdvisorBriefing(mockInput, {
+          interactionRunner: async () => {
+            throw new Error("Connection reset");
+          },
+        });
+      }
 
-      globalThis.fetch = vi.fn().mockImplementation(() =>
-        Promise.resolve(
-          new Response(
-            JSON.stringify({
-              candidates: [
-                {
-                  content: {
-                    parts: [{ text: JSON.stringify(validCleanJson) }],
-                  },
-                },
-              ],
-            }),
-            { status: 200, headers: { "Content-Type": "application/json" } },
-          ),
-        ),
-      );
-
-      const result = await generateAdvisorBriefing(mockInput);
-
-      expect(result.isFallback).toBe(false);
-      expect(result.fallbackReason).toBeUndefined();
-      expect(result.output.familyBriefing).toBe(validCleanJson.familyBriefing);
+      const openResult = await generateAdvisorBriefing(mockInput, {
+        interactionRunner: async () => {
+          throw new Error("Should not be called while circuit is open");
+        },
+      });
+      expect(openResult.isFallback).toBe(true);
+      expect(openResult.fallbackReason).toBe("GEMINI_CIRCUIT_OPEN");
     });
 
     it("should fallback immediately if GEMINI_API_KEY is not set", async () => {

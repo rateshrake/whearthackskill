@@ -290,5 +290,34 @@ describe("Module 2: diurnalOptimizer", () => {
       expect(zeroDose.shiftedDoseUg).toBe(0);
       expect(zeroDose.percentReduction).toBe(0);
     });
+
+    it("should find worst window when pollution rises later in the day", () => {
+      const risingData: DiurnalObservation[] = [
+        { timestampIso: "2026-11-20T00:00:00Z", pm25: 40, pm10: 70 },
+        { timestampIso: "2026-11-20T01:00:00Z", pm25: 50, pm10: 80 },
+        { timestampIso: "2026-11-20T02:00:00Z", pm25: 180, pm10: 290 },
+        { timestampIso: "2026-11-20T03:00:00Z", pm25: 220, pm10: 350 },
+      ];
+      const res = computeRollingDiurnalWindows(risingData, {
+        applyHumidityCorrection: false,
+      });
+      expect(res.cleanestToday?.averagePm25).toBeLessThan(100);
+      expect(res.worstToday?.averagePm25).toBe(200);
+      expect(res.humidityAdjustmentCount).toBe(0);
+    });
+
+    it("should sort unsorted timestamps and ignore invalid ISO dates", () => {
+      const unsorted: DiurnalObservation[] = [
+        { timestampIso: "invalid-date", pm25: 999, pm10: 999 },
+        { timestampIso: "2026-11-20T03:00:00Z", pm25: 60, pm10: 100 },
+        { timestampIso: "2026-11-20T04:00:00Z", pm25: 80, pm10: 120 },
+        { timestampIso: "2026-11-20T00:00:00Z", pm25: 200, pm10: 300 },
+        { timestampIso: "2026-11-20T01:00:00Z", pm25: 180, pm10: 280 },
+      ];
+      const res = computeRollingDiurnalWindows(unsorted);
+      expect(res.windows.length).toBe(3);
+      expect(res.worstToday?.averagePm25).toBe(190);
+      expect(res.cleanestToday?.averagePm25).toBe(70);
+    });
   });
 });

@@ -22,6 +22,17 @@ describe("Service 1: gridCache", () => {
       expect(q.lat).toBe(0.0);
       expect(q.lon).toBe(-0.01);
     });
+
+    it("should normalize -0 near equator and reject invalid coordinates", () => {
+      const qNegZero = quantizeCoordinates(-0.001, -0.002);
+      expect(Object.is(qNegZero.lat, -0)).toBe(false);
+      expect(Object.is(qNegZero.lon, -0)).toBe(false);
+      expect(qNegZero.gridKey).toBe("0.00,0.00");
+
+      expect(() => quantizeCoordinates(Number.NaN, 77)).toThrow(RangeError);
+      expect(() => quantizeCoordinates(91, 77)).toThrow(RangeError);
+      expect(() => quantizeCoordinates(28, 181)).toThrow(RangeError);
+    });
   });
 
   describe("Bounded LRU/TTL Cache Behavior", () => {
@@ -101,6 +112,14 @@ describe("Service 1: gridCache", () => {
 
       cache.clear();
       expect(cache.getStats().size).toBe(0);
+    });
+
+    it("should clamp capacity to at least 1 and overwrite existing keys without false eviction", () => {
+      const minCache = new GridCache<string>(0);
+      minCache.set("a", "1", 60000);
+      minCache.set("a", "2", 60000);
+      expect(minCache.get("a")).toBe("2");
+      expect(minCache.getStats().evictions).toBe(0);
     });
   });
 });

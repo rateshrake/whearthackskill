@@ -264,17 +264,86 @@ const US_EPA_2024_PM25_BREAKPOINTS: readonly LinearBreakpoint[] = [
  * I = I_low + ((I_high - I_low) / (C_high - C_low)) * (C - C_low)
  */
 function interpolate(c: number, bp: LinearBreakpoint): number {
+  if (bp.cHigh === bp.cLow) {
+    return bp.iLow;
+  }
   return bp.iLow + ((bp.iHigh - bp.iLow) / (bp.cHigh - bp.cLow)) * (c - bp.cLow);
 }
 
+/**
+ * Resolves the active breakpoint bracket, bridging inter-bracket gaps (e.g., 30..31)
+ * with a continuous linear segment so sub-indices remain strictly monotonic.
+ */
 function findBreakpoint(c: number, table: readonly LinearBreakpoint[]): LinearBreakpoint {
-  return table.find((bp) => c <= bp.cHigh) ?? table[table.length - 1]!;
+  for (let i = 0; i < table.length; i++) {
+    const bp = table[i]!;
+    if (c <= bp.cHigh) {
+      if (i > 0 && c < bp.cLow) {
+        const prev = table[i - 1]!;
+        return {
+          cLow: prev.cHigh,
+          cHigh: bp.cLow,
+          iLow: prev.iHigh,
+          iHigh: bp.iLow,
+        };
+      }
+      return bp;
+    }
+  }
+  return table[table.length - 1]!;
+}
+
+interface InterpolatedIndex {
+  concentration: number;
+  aqi: number;
+  rawAqi: number;
+  isCapped: boolean;
+}
+
+function interpolateFromTable(
+  concentration: number,
+  table: readonly LinearBreakpoint[],
+  contextLabel: string,
+): InterpolatedIndex {
+  if (!Number.isFinite(concentration)) {
+    throw new RangeError(`${contextLabel}: concentration must be a finite number.`);
+  }
+
+  const c = Math.max(0, concentration);
+  const topBp = table[table.length - 1]!;
+
+  let rawAqi = 0;
+  let isCapped = false;
+
+  if (c > topBp.cHigh) {
+    rawAqi = interpolate(c, topBp);
+    isCapped = true;
+  } else {
+    const matchedBp = findBreakpoint(c, table);
+    rawAqi = interpolate(c, matchedBp);
+  }
+
+  const roundedRaw = Math.round(rawAqi);
+  const aqi = Math.min(500, Math.max(0, roundedRaw));
+  if (roundedRaw > 500) {
+    isCapped = true;
+  }
+
+  return {
+    concentration: c,
+    aqi,
+    rawAqi: roundedRaw,
+    isCapped,
+  };
 }
 
 /**
  * Classifies CPCB AQI value into official health categories.
  */
 export function classifyCpcbAqi(aqi: number): CpcbCategory {
+  if (!Number.isFinite(aqi)) {
+    throw new RangeError("classifyCpcbAqi: AQI must be a finite number.");
+  }
   if (aqi <= 50) return "Good";
   if (aqi <= 100) return "Satisfactory";
   if (aqi <= 200) return "Moderate";
@@ -287,6 +356,9 @@ export function classifyCpcbAqi(aqi: number): CpcbCategory {
  * Classifies US EPA AQI value into official health categories.
  */
 export function classifyUsEpaAqi(aqi: number): UsEpaCategory {
+  if (!Number.isFinite(aqi)) {
+    throw new RangeError("classifyUsEpaAqi: AQI must be a finite number.");
+  }
   if (aqi <= 50) return "Good";
   if (aqi <= 100) return "Moderate";
   if (aqi <= 150) return "Unhealthy for Sensitive Groups";
@@ -297,53 +369,34 @@ export function classifyUsEpaAqi(aqi: number): UsEpaCategory {
 
 /**
  * Calculates CPCB Sub-Index for a single pollutant.
- * Handles integer and continuous boundaries per CPCB rules.
+ * Handles continuous inter-bracket boundaries while preserving official CPCB breakpoints.
  */
 export function calculateCpcbSubIndex(
   pollutant: "PM2.5" | "PM10" | "NO2" | "O3" | "SO2" | "CO",
   concentration: number,
 ): CpcbSubIndexResult {
-  const c = Math.max(0, concentration);
-  const table = CPCB_BREAKPOINTS[pollutant];
-  const topBp = table[table.length - 1]!;
-
-  let rawSubIndex = 0;
-  let isCapped = false;
-  let isUncappedRawSeverity = false;
-
-  if (c > topBp.cHigh) {
-    rawSubIndex = interpolate(c, topBp);
-    isCapped = true;
-    if (pollutant === "PM2.5" && c > 380) {
-      isUncappedRawSeverity = true;
-    }
-  } else {
-    const matchedBp = findBreakpoint(c, table);
-    rawSubIndex = interpolate(c, matchedBp);
-  }
-
-  const roundedRaw = Math.round(rawSubIndex);
-  const subIndex = Math.min(500, Math.max(0, roundedRaw));
-  if (roundedRaw > 500) {
-    isCapped = true;
-  }
-
-  const category = classifyCpcbAqi(subIndex);
+  const result = interpolateFromTable(
+    concentration,
+    CPCB_BREAKPOINTS[pollutant],
+    `calculateCpcbSubIndex(${pollutant})`,
+  );
+  const isUncappedRawSeverity = pollutant === "PM2.5" && result.concentration > 380;
+  const category = classifyCpcbAqi(result.aqi);
 
   return {
     pollutant,
-    concentration: c,
-    subIndex,
-    rawSubIndex: roundedRaw,
+    concentration: result.concentration,
+    subIndex: result.aqi,
+    rawSubIndex: result.rawAqi,
     category,
-    isCapped,
+    isCapped: result.isCapped,
     isUncappedRawSeverity,
   };
 }
 
 /**
  * Calculates India CPCB National AQI from multiple pollutant concentrations.
- * Overall AQI is the maximum of all valid sub-indices.
+ * Overall AQI is the maximum of all valid finite sub-indices.
  */
 export function calculateCpcbAqi(concentrations: PollutantConcentrations): CpcbAqiResult {
   const subIndices: Partial<
@@ -353,6 +406,7 @@ export function calculateCpcbAqi(concentrations: PollutantConcentrations): CpcbA
   let maxSubIndex = 0;
   let maxRawAqi = 0;
   let criticalPollutant: "PM2.5" | "PM10" | "NO2" | "O3" | "SO2" | "CO" = "PM2.5";
+  let hasValidPollutant = false;
   let hasCapped = false;
   let hasUncappedRawSeverity = false;
 
@@ -368,11 +422,12 @@ export function calculateCpcbAqi(concentrations: PollutantConcentrations): CpcbA
   ];
 
   for (const [key, val] of pollutantEntries) {
-    if (val !== undefined && !Number.isNaN(val)) {
+    if (val !== undefined && Number.isFinite(val)) {
       const res = calculateCpcbSubIndex(key, val);
       subIndices[key] = res;
 
-      if (res.subIndex >= maxSubIndex) {
+      if (!hasValidPollutant || res.subIndex > maxSubIndex) {
+        hasValidPollutant = true;
         maxSubIndex = res.subIndex;
         maxRawAqi = res.rawSubIndex;
         criticalPollutant = key;
@@ -400,40 +455,21 @@ export function calculateCpcbAqi(concentrations: PollutantConcentrations): CpcbA
  * Calculates US EPA May 2024 Revised AQI for PM2.5.
  */
 export function calculateUsEpa2024Pm25Aqi(pm25: number): UsEpaAqiResult {
-  const c = Math.max(0, pm25);
-  const table = US_EPA_2024_PM25_BREAKPOINTS;
-  const topBp = table[table.length - 1]!;
-
-  let rawAqi = 0;
-  let isCapped = false;
-  let isUncappedRawSeverity = false;
-
-  if (c > topBp.cHigh) {
-    rawAqi = interpolate(c, topBp);
-    isCapped = true;
-    isUncappedRawSeverity = true;
-  } else {
-    const matchedBp = findBreakpoint(c, table);
-    rawAqi = interpolate(c, matchedBp);
-  }
-
-  const roundedRaw = Math.round(rawAqi);
-  const aqi = Math.min(500, Math.max(0, roundedRaw));
-  if (roundedRaw > 500) {
-    isCapped = true;
-    isUncappedRawSeverity = true;
-  }
-
-  const category = classifyUsEpaAqi(aqi);
+  const result = interpolateFromTable(
+    pm25,
+    US_EPA_2024_PM25_BREAKPOINTS,
+    "calculateUsEpa2024Pm25Aqi",
+  );
+  const category = classifyUsEpaAqi(result.aqi);
 
   return {
     pollutant: "PM2.5",
-    concentration: c,
-    aqi,
-    rawAqi: roundedRaw,
+    concentration: result.concentration,
+    aqi: result.aqi,
+    rawAqi: result.rawAqi,
     category,
-    isCapped,
-    isUncappedRawSeverity,
+    isCapped: result.isCapped,
+    isUncappedRawSeverity: result.isCapped,
     colorBlindSafeToken: COLOR_BLIND_SAFE_TOKENS[category],
   };
 }

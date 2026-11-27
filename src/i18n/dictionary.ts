@@ -285,7 +285,7 @@ export const DICTIONARY: Record<SupportedLanguage, TranslationDictionary> = {
       openWindowsLabel: "Open Windows Baseline (~92% Infiltration)",
       closedNoFilterLabel: "Closed Windows Only (~81% Infiltration)",
       closedHepaLabel: "Closed Windows + Sized HEPA Purifier (~21% Infiltration)",
-      targetCadrTitle: "CADR Sizing for &le; 21% Infiltration (or WHO Targets)",
+      targetCadrTitle: "CADR Sizing for ≤ 21% Infiltration (or WHO Targets)",
       targetCadrAchieved:
         "Active filtration already satisfies the high-protection shelter target.",
       targetCadrNeeded:

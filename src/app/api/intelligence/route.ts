@@ -1,162 +1,91 @@
-import { NextRequest, NextResponse } from "next/server";
-import { z } from "zod";
+import { type NextRequest, NextResponse } from "next/server";
 import {
   aggregateAirIntelligence,
   generateAdvisorBriefing,
-  globalRateLimiter,
-  applySecurityHeaders,
+  handleGuardedApiRoute,
+  IntelligenceQuerySchema,
   type AdvisorMetricsInput,
 } from "@/services";
-import { mapAqiToGrapStage } from "@/engine";
+import { HOUSEHOLD_ARCHETYPES, mapAqiToGrapStage } from "@/engine";
 
-const IntelligenceQuerySchema = z.object({
-  lat: z
-    .string({ message: "Latitude is required" })
-    .min(1, "Latitude is required")
-    .refine(
-      (v) => !Number.isNaN(Number(v)) && v.trim() !== "",
-      "Latitude must be a valid number",
-    )
-    .transform((v) => Number(v))
-    .pipe(
-      z
-        .number()
-        .min(-90, "Latitude must be between -90 and 90")
-        .max(90, "Latitude must be between -90 and 90"),
-    ),
-  lon: z
-    .string({ message: "Longitude is required" })
-    .min(1, "Longitude is required")
-    .refine(
-      (v) => !Number.isNaN(Number(v)) && v.trim() !== "",
-      "Longitude must be a valid number",
-    )
-    .transform((v) => Number(v))
-    .pipe(
-      z
-        .number()
-        .min(-180, "Longitude must be between -180 and 180")
-        .max(180, "Longitude must be between -180 and 180"),
-    ),
-  lang: z.enum(["en", "hi"]).default("en"),
-  archetype: z
-    .enum(["child_asthma", "older_adult_walker", "office_commuter", "general_adult"])
-    .default("child_asthma"),
-});
+function formatWindowTimeUtc(
+  startIso: string | undefined,
+  endIso: string | undefined,
+  fallbackRange: string,
+): string {
+  if (!startIso || !endIso) return fallbackRange;
+  return `${startIso.slice(11, 16)} - ${endIso.slice(11, 16)} UTC`;
+}
 
 export async function GET(request: NextRequest) {
-  // 1. Sliding-Window Rate Limiter
-  const ip =
-    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
-    request.headers.get("x-real-ip") ??
-    "127.0.0.1";
+  return handleGuardedApiRoute(
+    "/api/intelligence",
+    request,
+    async ({ rateLimitHeaders }) => {
+      const { searchParams } = new URL(request.url);
+      const validation = IntelligenceQuerySchema.safeParse({
+        lat: searchParams.get("lat") ?? undefined,
+        lon: searchParams.get("lon") ?? undefined,
+        lang: searchParams.get("lang") ?? "en",
+        archetype: searchParams.get("archetype") ?? "child_asthma",
+      });
 
-  const rateLimit = globalRateLimiter.check(ip);
-  if (!rateLimit.allowed) {
-    const errorResponse = NextResponse.json(
-      {
-        error: "Too Many Requests",
-        message: "Sliding-window rate limit exceeded. Please throttle requests.",
-        limit: rateLimit.limit,
-        retryAfterSeconds: rateLimit.resetSeconds,
-      },
-      {
-        status: 429,
-        headers: {
-          "Retry-After": rateLimit.resetSeconds.toString(),
-          "X-RateLimit-Limit": rateLimit.limit.toString(),
-          "X-RateLimit-Remaining": "0",
+      if (!validation.success) {
+        return NextResponse.json(
+          {
+            error: "Bad Request",
+            message: "Invalid parameters provided to intelligence engine.",
+            issues: validation.error.issues.map((issue) => ({
+              path: issue.path.join("."),
+              message: issue.message,
+            })),
+          },
+          { status: 400 },
+        );
+      }
+
+      const { lat, lon, lang, archetype } = validation.data;
+      const payload = await aggregateAirIntelligence(lat, lon);
+      const grapStage = mapAqiToGrapStage(payload.currentConditions.cpcb.aqi);
+
+      const advisorInput: AdvisorMetricsInput = {
+        cpcbAqi: payload.currentConditions.cpcb.aqi,
+        cpcbCategory: payload.currentConditions.cpcb.category,
+        usEpaAqi: payload.currentConditions.usEpa.aqi,
+        usEpaCategory: payload.currentConditions.usEpa.category,
+        satisfactoryIllusionAlert: payload.currentConditions.satisfactoryIllusionAlert,
+        cleanestWindowTime: formatWindowTimeUtc(
+          payload.diurnalAnalysis.cleanestToday?.startTimeIso,
+          payload.diurnalAnalysis.cleanestToday?.endTimeIso,
+          "14:00 - 16:00 UTC",
+        ),
+        cleanestWindowPm25: payload.diurnalAnalysis.cleanestToday?.averagePm25 ?? 55.0,
+        worstWindowTime: formatWindowTimeUtc(
+          payload.diurnalAnalysis.worstToday?.startTimeIso,
+          payload.diurnalAnalysis.worstToday?.endTimeIso,
+          "06:00 - 08:00 UTC",
+        ),
+        worstWindowPm25: payload.diurnalAnalysis.worstToday?.averagePm25 ?? 220.0,
+        grapStageId: grapStage.stage,
+        grapStageName: grapStage.stageName,
+        archetype,
+        archetypeLabel: HOUSEHOLD_ARCHETYPES[archetype].label,
+        upwindFireAlignment: payload.upwindFireContext.alignment,
+        language: lang,
+      };
+
+      const advisorResult = await generateAdvisorBriefing(advisorInput);
+
+      return NextResponse.json(
+        {
+          intelligence: payload,
+          advisor: advisorResult,
         },
-      },
-    );
-    return applySecurityHeaders(errorResponse);
-  }
-
-  // 2. Validate input parameters
-  const { searchParams } = new URL(request.url);
-  const rawLat = searchParams.get("lat");
-  const rawLon = searchParams.get("lon");
-  const rawLang = searchParams.get("lang") ?? "en";
-  const rawArchetype = searchParams.get("archetype") ?? "child_asthma";
-
-  const validation = IntelligenceQuerySchema.safeParse({
-    lat: rawLat ?? undefined,
-    lon: rawLon ?? undefined,
-    lang: rawLang,
-    archetype: rawArchetype,
-  });
-
-  if (!validation.success) {
-    const badRequest = NextResponse.json(
-      {
-        error: "Bad Request",
-        message: "Invalid parameters provided to intelligence engine.",
-        issues: validation.error.format(),
-      },
-      { status: 400 },
-    );
-    return applySecurityHeaders(badRequest);
-  }
-
-  const { lat, lon, lang, archetype } = validation.data;
-
-  try {
-    const payload = await aggregateAirIntelligence(lat, lon);
-    const grapStage = mapAqiToGrapStage(payload.currentConditions.cpcb.aqi);
-
-    const advisorInput: AdvisorMetricsInput = {
-      cpcbAqi: payload.currentConditions.cpcb.aqi,
-      cpcbCategory: payload.currentConditions.cpcb.category,
-      usEpaAqi: payload.currentConditions.usEpa.aqi,
-      usEpaCategory: payload.currentConditions.usEpa.category,
-      satisfactoryIllusionAlert: payload.currentConditions.satisfactoryIllusionAlert,
-      cleanestWindowTime: payload.diurnalAnalysis.cleanestToday
-        ? `${payload.diurnalAnalysis.cleanestToday.startTimeIso.slice(11, 16)} - ${payload.diurnalAnalysis.cleanestToday.endTimeIso.slice(11, 16)} UTC`
-        : "14:00 - 16:00",
-      cleanestWindowPm25: payload.diurnalAnalysis.cleanestToday?.averagePm25 ?? 55.0,
-      worstWindowTime: payload.diurnalAnalysis.worstToday
-        ? `${payload.diurnalAnalysis.worstToday.startTimeIso.slice(11, 16)} - ${payload.diurnalAnalysis.worstToday.endTimeIso.slice(11, 16)} UTC`
-        : "06:00 - 08:00",
-      worstWindowPm25: payload.diurnalAnalysis.worstToday?.averagePm25 ?? 220.0,
-      grapStageId: grapStage.stage,
-      grapStageName: grapStage.stageName,
-      archetype,
-      archetypeLabel:
-        archetype === "child_asthma"
-          ? "Child with Asthma"
-          : archetype === "older_adult_walker"
-            ? "Older Adult (Morning Walker)"
-            : archetype === "office_commuter"
-              ? "Office Commuter"
-              : "General Adult",
-      upwindFireAlignment: payload.upwindFireContext.alignment,
-      language: lang,
-    };
-
-    const advisorResult = await generateAdvisorBriefing(advisorInput);
-
-    const response = NextResponse.json(
-      {
-        intelligence: payload,
-        advisor: advisorResult,
-      },
-      {
-        status: 200,
-        headers: {
-          "X-RateLimit-Limit": rateLimit.limit.toString(),
-          "X-RateLimit-Remaining": rateLimit.remaining.toString(),
+        {
+          status: 200,
+          headers: rateLimitHeaders,
         },
-      },
-    );
-
-    return applySecurityHeaders(response);
-  } catch (error: unknown) {
-    const message =
-      error instanceof Error ? error.message : "Internal Intelligence Failure";
-    const serverError = NextResponse.json(
-      { error: "Internal Server Error", message },
-      { status: 500 },
-    );
-    return applySecurityHeaders(serverError);
-  }
+      );
+    },
+  );
 }

@@ -9,3 +9,4 @@ export * from "./IndoorShelterCard";
 export * from "./UpwindContextCard";
 export * from "./CommunityHub";
 export * from "./AttributionFooter";
+export * from "./ErrorBoundary";

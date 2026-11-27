@@ -39,8 +39,11 @@ export interface CacheStats {
   evictions: number;
 }
 
+const normalizeZero = (value: number): number => (Object.is(value, -0) ? 0 : value);
+
 /**
  * Quantizes GPS coordinates to a 0.01 degree grid (~1.1 km).
+ * Rejects non-finite or out-of-range coordinates and normalizes -0 to +0.
  * Example: (28.613939, 77.209021) -> { lat: 28.61, lon: 77.21, gridKey: "28.61,77.21" }
  */
 export function quantizeCoordinates(
@@ -48,8 +51,15 @@ export function quantizeCoordinates(
   lon: number,
   prefix?: string,
 ): QuantizedCoordinates {
-  const roundedLat = Number(lat.toFixed(2));
-  const roundedLon = Number(lon.toFixed(2));
+  if (!Number.isFinite(lat) || lat < -90 || lat > 90) {
+    throw new RangeError(`Invalid latitude for coordinate quantization: ${String(lat)}`);
+  }
+  if (!Number.isFinite(lon) || lon < -180 || lon > 180) {
+    throw new RangeError(`Invalid longitude for coordinate quantization: ${String(lon)}`);
+  }
+
+  const roundedLat = normalizeZero(Number(lat.toFixed(2)));
+  const roundedLon = normalizeZero(Number(lon.toFixed(2)));
   const baseKey = `${roundedLat.toFixed(2)},${roundedLon.toFixed(2)}`;
   const gridKey = prefix ? `${prefix}:${baseKey}` : baseKey;
 
@@ -150,6 +160,7 @@ export class GridCache<T> {
     this.hitsCount = 0;
     this.missesCount = 0;
     this.evictionsCount = 0;
+    this.accessCounter = 0;
   }
 
   /**

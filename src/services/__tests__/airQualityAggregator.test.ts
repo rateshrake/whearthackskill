@@ -10,6 +10,8 @@ import {
   MANDATORY_ATTRIBUTIONS,
 } from "../airQualityAggregator";
 import { globalStationCache, globalForecastCache, globalFirmsCache } from "../gridCache";
+import { resetAllCircuitBreakers, redactSecrets } from "../resilientHttp";
+import { normalizeUtcTimestampToIso } from "../providers/primaryAirQuality";
 
 describe("Service 3: airQualityAggregator", () => {
   const originalFetch = globalThis.fetch;
@@ -19,6 +21,7 @@ describe("Service 3: airQualityAggregator", () => {
     globalStationCache.clear();
     globalForecastCache.clear();
     globalFirmsCache.clear();
+    resetAllCircuitBreakers();
     process.env = { ...originalEnv };
   });
 
@@ -304,6 +307,103 @@ describe("Service 3: airQualityAggregator", () => {
       expect(p2.quantizedCoordinates.lat).toBe(28.61);
       expect(p2.quantizedCoordinates.lon).toBe(77.21);
       expect(p2.provenance.isCacheHit).toBe(true);
+    });
+
+    it("should classify crosswind fire alignment and handle OpenAQ fallback & full outage resilience", async () => {
+      process.env.NASA_FIRMS_MAP_KEY = "mock_firms_key";
+      process.env.OPENAQ_API_KEY = "mock_openaq_key";
+
+      globalThis.fetch = vi.fn().mockImplementation((url: string | URL | Request) => {
+        const urlStr = url.toString();
+        if (urlStr.includes("api.open-meteo.com/v1/forecast")) {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                current: { wind_speed_10m: 15, wind_direction_10m: 90 }, // East wind
+              }),
+              { status: 200 },
+            ),
+          );
+        }
+        if (urlStr.includes("firms.modaps.eosdis.nasa.gov")) {
+          // Fire due North of Delhi -> 90 deg difference from East wind -> crosswind
+          const csv = "latitude,longitude,bright_ti4\n29.6,77.21,330.0\n";
+          return Promise.resolve(new Response(csv, { status: 200 }));
+        }
+        if (urlStr.includes("api.openaq.org/v3/locations")) {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                results: [
+                  {
+                    name: "OpenAQ Test Station",
+                    owner: { name: "Community Sensor" },
+                    sensors: [{ parameter: { name: "pm25" }, value: 110 }],
+                  },
+                ],
+              }),
+              { status: 200 },
+            ),
+          );
+        }
+        return Promise.resolve(new Response("Not found", { status: 404 }));
+      });
+
+      const fireContext = await fetchUpwindFireContext(28.61, 77.21);
+      expect(fireContext.alignment).toBe("crosswind");
+
+      const station = await fetchGroundStationData(28.61, 77.21, 100);
+      expect(station?.stationName).toBe("OpenAQ Test Station");
+      expect(station?.attribution).toContain("OpenAQ");
+
+      // Total upstream failure still returns resilient fallback payload
+      globalForecastCache.clear();
+      globalFirmsCache.clear();
+      globalStationCache.clear();
+      globalThis.fetch = vi.fn().mockRejectedValue(new Error("Network down"));
+      const fallback = await aggregateAirIntelligence(28.61, 77.21);
+      expect(fallback.currentConditions.pm25).toBeGreaterThan(0);
+      expect(fallback.diurnalAnalysis.observations48h.length).toBeGreaterThan(0);
+    });
+
+    it("should normalize Open-Meteo UTC timestamps, send Google Maps key via header, and redact secret URLs", async () => {
+      expect(normalizeUtcTimestampToIso("2026-11-20T05:00")).toBe(
+        "2026-11-20T05:00:00.000Z",
+      );
+      expect(
+        redactSecrets(
+          "Fetch failed https://api.waqi.info/feed/geo:28;77/?token=secret123&key=AIzaSyTestKeyValue12345",
+        ),
+      ).not.toContain("secret123");
+
+      process.env.GOOGLE_MAPS_API_KEY = "gmaps_header_secret";
+      let capturedUrl = "";
+      let capturedHeader: string | null = null;
+
+      globalThis.fetch = vi
+        .fn()
+        .mockImplementation((url: string | URL | Request, init?: RequestInit) => {
+          const urlStr = url.toString();
+          if (urlStr.includes("airquality.googleapis.com")) {
+            capturedUrl = urlStr;
+            const hdrs = new Headers(init?.headers);
+            capturedHeader = hdrs.get("X-Goog-Api-Key");
+            return Promise.resolve(
+              new Response(
+                JSON.stringify({
+                  pollutants: [{ code: "pm25", concentration: { value: 90 } }],
+                }),
+                { status: 200 },
+              ),
+            );
+          }
+          return Promise.resolve(new Response("Not found", { status: 404 }));
+        });
+
+      const res = await fetchPrimaryAirQuality(28.61, 77.21);
+      expect(res.source).toBe("google_maps");
+      expect(capturedUrl).not.toContain("gmaps_header_secret");
+      expect(capturedHeader).toBe("gmaps_header_secret");
     });
   });
 });

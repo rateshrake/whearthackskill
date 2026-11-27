@@ -3,21 +3,25 @@
  * Module: geminiAdvisor.ts
  *
  * Implements:
- * 1. Guarded Gemini API decision layer using structured JSON output.
+ * 1. Guarded Gemini API decision layer using @google/genai Interactions API (gemini-4-hydrogen)
+ *    with x-goog-api-key header authentication (never passing API keys in URL query strings).
  * 2. Strict Input Isolation: Only pre-computed engine metrics are passed to Gemini;
- *    Gemini is NEVER asked to calculate numbers or exposure physics.
- * 3. Structured Output Schema:
- *    { topActionIds: string[], familyBriefing: string, rwaNoticeHeadline: string, rwaNoticeBody: string }
+ *    system instructions are separated from sanitized metrics input.
+ * 3. Structured JSON Output Schema & store: false for stateless privacy.
  * 4. Critical Untrusted Output Guardrails:
- *    - Strict digit-rejection regex (/\d/) to block hallucinated measurements.
- *    - Strict timeout abort (> 3.5 seconds).
- *    - Immediate fallback to deterministic, pre-verified templates in English or Hindi
- *      populated with exact, certified engine metrics.
+ *    - Unicode decimal digit rejection (/\p{Nd}/u) blocking ASCII and Devanagari digits.
+ *    - Strict timeout abort (default 3.5s) + circuit breaker + no slow retries.
+ *    - Immediate fallback to deterministic bilingual templates populated with verified engine metrics.
  */
 
+import { GoogleGenAI } from "@google/genai";
 import { z } from "zod";
 import type { HouseholdArchetype, GrapStageId } from "@/engine";
 import type { UpwindAlignment } from "./airQualityAggregator";
+import { getCircuitBreaker, redactSecrets } from "./resilientHttp";
+import { recordUpstreamMetric } from "./observability";
+
+export const DEFAULT_GEMINI_MODEL = "gemini-4-hydrogen";
 
 export interface AdvisorMetricsInput {
   cpcbAqi: number;
@@ -38,10 +42,10 @@ export interface AdvisorMetricsInput {
 }
 
 export const AdvisorOutputSchema = z.object({
-  topActionIds: z.array(z.string().min(1)).min(1),
-  familyBriefing: z.string().min(10),
-  rwaNoticeHeadline: z.string().min(5),
-  rwaNoticeBody: z.string().min(10),
+  topActionIds: z.array(z.string().min(1).max(80)).min(1).max(8),
+  familyBriefing: z.string().min(10).max(2000),
+  rwaNoticeHeadline: z.string().min(5).max(240),
+  rwaNoticeBody: z.string().min(10).max(2000),
 });
 
 export type AdvisorOutput = z.infer<typeof AdvisorOutputSchema>;
@@ -53,12 +57,65 @@ export interface AdvisorExecutionResult {
   executionDurationMs: number;
 }
 
+export interface AdvisorInteractionParams {
+  apiKey: string;
+  model: string;
+  systemInstruction: string;
+  input: string;
+  timeoutMs: number;
+  signal: AbortSignal;
+}
+
+export type AdvisorInteractionRunner = (
+  params: AdvisorInteractionParams,
+) => Promise<{ outputText?: string | null | undefined }>;
+
+const ADVISOR_RESPONSE_JSON_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["topActionIds", "familyBriefing", "rwaNoticeHeadline", "rwaNoticeBody"],
+  properties: {
+    topActionIds: {
+      type: "array",
+      minItems: 1,
+      items: { type: "string" },
+    },
+    familyBriefing: { type: "string" },
+    rwaNoticeHeadline: { type: "string" },
+    rwaNoticeBody: { type: "string" },
+  },
+} as const;
+
+const ADVISOR_SYSTEM_INSTRUCTION =
+  "You are the VayuShield Public Health & Environmental Advisor for urban India. " +
+  "Provide a brief, actionable family guidance summary and an official Resident Welfare Association (RWA) notice " +
+  "using ONLY qualitative guidance based on the provided metrics.\n" +
+  "STRICT SAFETY CONSTRAINTS:\n" +
+  "1. DO NOT include ANY numeric digits (ASCII 0-9 or Devanagari/Unicode digits) anywhere in your output. " +
+  "Refer to tiers and exposure windows qualitatively (e.g., Severe tier, cleanest afternoon window, boundary layer dispersion).\n" +
+  "2. Deliver practical mitigation actions such as fitted N-ninety-five respirator seals, indoor HEPA filtration, " +
+  "exhaust venting, and avoiding diesel or biomass smoke.\n" +
+  "3. Output MUST be valid JSON matching the required schema.";
+
+function sanitizePromptText(value: string): string {
+  return value
+    .replace(/[\u0000-\u001F\u007F]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 100);
+}
+
 /**
  * Deterministic, pre-verified fallback templates populated with certified engine numbers.
  * Zero reliance on generative AI when errors, timeouts, or digit hallucinations occur.
  */
 export function generateDeterministicFallback(input: AdvisorMetricsInput): AdvisorOutput {
   const isHindi = input.language === "hi";
+  const safeCategory = sanitizePromptText(input.cpcbCategory);
+  const safeArchetype = sanitizePromptText(input.archetypeLabel);
+  const safeCleanWindow = sanitizePromptText(input.cleanestWindowTime);
+  const safeWorstWindow = sanitizePromptText(input.worstWindowTime);
+  const safeGrapName = sanitizePromptText(input.grapStageName);
 
   if (isHindi) {
     const illusionWarning = input.satisfactoryIllusionAlert
@@ -77,10 +134,10 @@ export function generateDeterministicFallback(input: AdvisorMetricsInput): Advis
         "shift_outdoor_to_cleanest_window",
       ],
       familyBriefing:
-        `वायु गुणवत्ता सूचकांक वर्तमान में ${input.cpcbAqi} (${input.cpcbCategory}) है। ` +
-        `${input.archetypeLabel} के लिए विशेष सावधानी आवश्यक है। दोपहर के स्वच्छतम समय (${input.cleanestWindowTime}, अनुमानित ${input.cleanestWindowPm25} µg/m³) को प्राथमिकता दें। ` +
-        `सुबह और रात के अत्यधिक प्रदूषित समय (${input.worstWindowTime}, ${input.worstWindowPm25} µg/m³) में बाहर जाने से बचें। ${illusionWarning} ${fireWarning}`,
-      rwaNoticeHeadline: `आरडब्ल्यूए एडवाइजरी: ग्रेप ${input.grapStageName} वायु प्रदूषण प्रतिबंध लागू`,
+        `वायु गुणवत्ता सूचकांक वर्तमान में ${input.cpcbAqi} (${safeCategory}) है। ` +
+        `${safeArchetype} के लिए विशेष सावधानी आवश्यक है। दोपहर के स्वच्छतम समय (${safeCleanWindow}, अनुमानित ${input.cleanestWindowPm25} µg/m³) को प्राथमिकता दें। ` +
+        `सुबह और रात के अत्यधिक प्रदूषित समय (${safeWorstWindow}, ${input.worstWindowPm25} µg/m³) में बाहर जाने से बचें। ${illusionWarning} ${fireWarning}`.trim(),
+      rwaNoticeHeadline: `आरडब्ल्यूए एडवाइजरी: ग्रेप ${safeGrapName} वायु प्रदूषण प्रतिबंध लागू`,
       rwaNoticeBody:
         `सभी निवासियों को सूचित किया जाता है कि दिल्ली-एनसीआर में सीपीसीबी सूचकांक ${input.cpcbAqi} दर्ज हुआ है। ` +
         `सोसाइटी में सूखी झाड़ू लगाना, कचरा जलाना और डीजल जनरेटर का संचालन पूर्णतः प्रतिबंधित है। ` +
@@ -88,7 +145,6 @@ export function generateDeterministicFallback(input: AdvisorMetricsInput): Advis
     };
   }
 
-  // English Deterministic Template
   const illusionText = input.satisfactoryIllusionAlert
     ? "ALERT: Local CPCB scale rates conditions benignly, but revised US EPA standards classify this level as Unhealthy for Sensitive Groups. Precautionary isolation is recommended."
     : "";
@@ -105,11 +161,11 @@ export function generateDeterministicFallback(input: AdvisorMetricsInput): Advis
       "shift_outdoor_to_cleanest_window",
     ],
     familyBriefing:
-      `Current CPCB AQI is ${input.cpcbAqi} (${input.cpcbCategory}). ` +
-      `Protection protocol active for ${input.archetypeLabel}: restrict outdoor exertion during morning peak hours (${input.worstWindowTime}, ${input.worstWindowPm25} µg/m³). ` +
-      `Shift mandatory ventilation or walking to the cleanest afternoon window (${input.cleanestWindowTime}, ${input.cleanestWindowPm25} µg/m³). ` +
+      `Current CPCB AQI is ${input.cpcbAqi} (${safeCategory}). ` +
+      `Protection protocol active for ${safeArchetype}: restrict outdoor exertion during morning peak hours (${safeWorstWindow}, ${input.worstWindowPm25} µg/m³). ` +
+      `Shift mandatory ventilation or walking to the cleanest afternoon window (${safeCleanWindow}, ${input.cleanestWindowPm25} µg/m³). ` +
       `${illusionText} ${fireText}`.trim(),
-    rwaNoticeHeadline: `RWA NOTICE: GRAP ${input.grapStageName} MANDATE ENFORCED`,
+    rwaNoticeHeadline: `RWA NOTICE: GRAP ${safeGrapName} MANDATE ENFORCED`,
     rwaNoticeBody:
       `In compliance with CAQM statutory guidelines for CPCB AQI ${input.cpcbAqi}, all non-essential DG sets are prohibited. ` +
       `Society housekeeping must avoid dry dust sweeping and utilize water sprinkling. ` +
@@ -119,12 +175,12 @@ export function generateDeterministicFallback(input: AdvisorMetricsInput): Advis
 
 /**
  * Strict digit-rejection guardrail:
- * Checks whether any string field in the response contains numeric digits (/\\d/).
- * Protects against hallucinated measurements (e.g. "PM2.5 is 142").
+ * Checks whether any string field in the response contains Unicode decimal digits (/\p{Nd}/u),
+ * blocking ASCII digits (0-9) as well as Devanagari numerals (०-९).
  */
 export function containsNumericDigits(obj: unknown): boolean {
   if (typeof obj === "string") {
-    return /\d/.test(obj);
+    return /\p{Nd}/u.test(obj);
   }
   if (Array.isArray(obj)) {
     return obj.some((item) => containsNumericDigits(item));
@@ -135,38 +191,99 @@ export function containsNumericDigits(obj: unknown): boolean {
   return false;
 }
 
-/**
- * Builds the qualitative prompt given to Gemini.
- * Explicitly forbids generating numeric digits to prevent hallucinated measurements.
- */
-function buildGeminiPrompt(input: AdvisorMetricsInput): string {
+function buildAdvisorInputContext(input: AdvisorMetricsInput): string {
   return (
-    `You are the VayuShield Public Health & Environmental Advisor for Delhi-NCR.\n` +
-    `Your task is to provide a brief, actionable family guidance summary and an official Resident Welfare Association (RWA) notice.\n\n` +
     `CURRENT CERTIFIED ENVIRONMENTAL STATUS:\n` +
-    `- Local CPCB Classification: ${input.cpcbCategory}\n` +
-    `- International US EPA Classification: ${input.usEpaCategory}\n` +
+    `- Local CPCB Classification: ${sanitizePromptText(input.cpcbCategory)}\n` +
+    `- International US EPA Classification: ${sanitizePromptText(input.usEpaCategory)}\n` +
     `- Satisfactory Illusion Alert: ${input.satisfactoryIllusionAlert ? "ACTIVE (Health risk obscured by local scale)" : "INACTIVE"}\n` +
     `- Diurnal Window Advice: Shift outdoor exposure from morning/nocturnal peak to afternoon solar ventilation window\n` +
-    `- Delhi-NCR GRAP Stage: ${input.grapStageName}\n` +
-    `- Vulnerable Family Member: ${input.archetypeLabel}\n` +
+    `- Delhi-NCR GRAP Stage: ${sanitizePromptText(input.grapStageName)}\n` +
+    `- Vulnerable Family Member: ${sanitizePromptText(input.archetypeLabel)}\n` +
     `- Regional Biomass Plume Alignment: ${input.upwindFireAlignment}\n` +
-    `- Target Language: ${input.language === "hi" ? "Hindi (Devanagari script)" : "English"}\n\n` +
-    `STRICT SAFETY CONSTRAINTS:\n` +
-    `1. DO NOT include ANY numeric digits (0-9) anywhere in your output. Refer to values qualitatively (e.g., Severe tier, cleanest afternoon window, high boundary layer dispersion).\n` +
-    `2. Deliver practical mitigation actions: N95 respirator seal, indoor HEPA filtration, exhaust venting, avoiding diesel emissions.\n` +
-    `3. Output MUST be valid JSON matching this exact structure:\n` +
-    `{\n` +
-    `  "topActionIds": ["string_action_id_one", "string_action_id_two"],\n` +
-    `  "familyBriefing": "qualitative prose guidance without any digits",\n` +
-    `  "rwaNoticeHeadline": "headline without any digits",\n` +
-    `  "rwaNoticeBody": "body text without any digits"\n` +
-    `}`
+    `- Target Language: ${input.language === "hi" ? "Hindi (Devanagari script)" : "English"}`
+  );
+}
+
+const defaultInteractionRunner: AdvisorInteractionRunner = async ({
+  apiKey,
+  model,
+  systemInstruction,
+  input,
+  timeoutMs,
+  signal,
+}) => {
+  const ai = new GoogleGenAI({ apiKey });
+  const interaction = await ai.interactions.create(
+    {
+      model,
+      system_instruction: systemInstruction,
+      input,
+      store: false,
+      generation_config: {
+        thinking_level: "low",
+      },
+      response_format: {
+        type: "text",
+        mime_type: "application/json",
+        schema: ADVISOR_RESPONSE_JSON_SCHEMA,
+      },
+    },
+    {
+      timeout_ms: timeoutMs,
+      retries: { strategy: "none" },
+      signal,
+    },
+  );
+
+  let fallbackStepText: string | undefined;
+  if (!interaction.output_text && Array.isArray(interaction.steps)) {
+    for (let i = interaction.steps.length - 1; i >= 0; i--) {
+      const step = interaction.steps[i];
+      if (step?.type === "model_output" && Array.isArray(step.content)) {
+        const textBlock = step.content.find(
+          (c): c is { type: "text"; text: string } =>
+            c.type === "text" && typeof c.text === "string",
+        );
+        if (textBlock) {
+          fallbackStepText = textBlock.text;
+          break;
+        }
+      }
+    }
+  }
+
+  return { outputText: interaction.output_text ?? fallbackStepText ?? null };
+};
+
+function extractHttpStatus(error: unknown): number | undefined {
+  if (error !== null && typeof error === "object") {
+    if ("status" in error && typeof error.status === "number") {
+      return error.status;
+    }
+    if ("statusCode" in error && typeof error.statusCode === "number") {
+      return error.statusCode;
+    }
+  }
+  return undefined;
+}
+
+function isAbortOrTimeoutError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const lowerMsg = error.message.toLowerCase();
+  return (
+    error.name === "AbortError" ||
+    error.name === "RequestTimeoutError" ||
+    error.name === "APIUserAbortError" ||
+    error.name === "TimeoutError" ||
+    lowerMsg.includes("abort") ||
+    lowerMsg.includes("timeout")
   );
 }
 
 /**
- * Invokes Gemini API with strict 3.5s timeout, Zod verification, and digit guardrail.
+ * Invokes Gemini Interactions API (gemini-4-hydrogen) via @google/genai SDK
+ * with strict 3.5s timeout, circuit breaker, Zod verification, and Unicode digit guardrail.
  */
 export async function generateAdvisorBriefing(
   input: AdvisorMetricsInput,
@@ -174,6 +291,7 @@ export async function generateAdvisorBriefing(
     timeoutMs?: number | undefined;
     customApiKey?: string | undefined;
     modelOverride?: string | undefined;
+    interactionRunner?: AdvisorInteractionRunner | undefined;
   } = {},
 ): Promise<AdvisorExecutionResult> {
   const startTime = Date.now();
@@ -189,50 +307,40 @@ export async function generateAdvisorBriefing(
     };
   }
 
-  // Model hierarchy: environment override -> user parameter -> default
-  const model = options.modelOverride ?? process.env.GEMINI_MODEL ?? "gemini-2.5-flash"; // Default to requested model, will work across supported Gemini endpoints
+  const breaker = getCircuitBreaker("gemini");
+  if (!breaker.canAttempt()) {
+    recordUpstreamMetric("gemini", false, 0);
+    return {
+      output: generateDeterministicFallback(input),
+      isFallback: true,
+      fallbackReason: "GEMINI_CIRCUIT_OPEN",
+      executionDurationMs: Date.now() - startTime,
+    };
+  }
 
-  const timeoutMs = options.timeoutMs ?? 3500;
-  const prompt = buildGeminiPrompt(input);
+  const model = options.modelOverride ?? process.env.GEMINI_MODEL ?? DEFAULT_GEMINI_MODEL;
+  const timeoutMs = Math.max(50, options.timeoutMs ?? 3500);
+  const runner = options.interactionRunner ?? defaultInteractionRunner;
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
+    const response = await runner({
+      apiKey,
+      model,
+      systemInstruction: ADVISOR_SYSTEM_INSTRUCTION,
+      input: buildAdvisorInputContext(input),
+      timeoutMs,
       signal: controller.signal,
-      body: JSON.stringify({
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
-        generationConfig: {
-          responseMimeType: "application/json",
-          temperature: 0.2,
-        },
-      }),
     });
 
     clearTimeout(timeoutId);
 
-    if (!res.ok) {
-      return {
-        output: generateDeterministicFallback(input),
-        isFallback: true,
-        fallbackReason: `GEMINI_HTTP_${res.status}`,
-        executionDurationMs: Date.now() - startTime,
-      };
-    }
-
-    const data = (await res.json()) as {
-      candidates?: Array<{
-        content?: { parts?: Array<{ text?: string }> };
-      }>;
-    };
-
-    const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    const rawText = response.outputText?.trim();
     if (!rawText) {
+      breaker.recordFailure();
+      recordUpstreamMetric("gemini", false, Date.now() - startTime);
       return {
         output: generateDeterministicFallback(input),
         isFallback: true,
@@ -241,11 +349,12 @@ export async function generateAdvisorBriefing(
       };
     }
 
-    // 1. Parse JSON
     let parsedJson: unknown;
     try {
       parsedJson = JSON.parse(rawText);
     } catch {
+      breaker.recordSuccess();
+      recordUpstreamMetric("gemini", false, Date.now() - startTime);
       return {
         output: generateDeterministicFallback(input),
         isFallback: true,
@@ -254,19 +363,21 @@ export async function generateAdvisorBriefing(
       };
     }
 
-    // 2. Validate with Zod
     const zodResult = AdvisorOutputSchema.safeParse(parsedJson);
     if (!zodResult.success) {
+      breaker.recordSuccess();
+      recordUpstreamMetric("gemini", false, Date.now() - startTime);
       return {
         output: generateDeterministicFallback(input),
         isFallback: true,
-        fallbackReason: `ZOD_SCHEMA_VIOLATION: ${zodResult.error.message}`,
+        fallbackReason: `ZOD_SCHEMA_VIOLATION: ${redactSecrets(zodResult.error.message)}`,
         executionDurationMs: Date.now() - startTime,
       };
     }
 
-    // 3. Strict Digit Rejection Guardrail
     if (containsNumericDigits(zodResult.data)) {
+      breaker.recordSuccess();
+      recordUpstreamMetric("gemini", false, Date.now() - startTime);
       return {
         output: generateDeterministicFallback(input),
         isFallback: true,
@@ -276,6 +387,8 @@ export async function generateAdvisorBriefing(
       };
     }
 
+    breaker.recordSuccess();
+    recordUpstreamMetric("gemini", true, Date.now() - startTime);
     return {
       output: zodResult.data,
       isFallback: false,
@@ -283,14 +396,25 @@ export async function generateAdvisorBriefing(
     };
   } catch (error: unknown) {
     clearTimeout(timeoutId);
-    const isAbort =
-      error instanceof Error &&
-      (error.name === "AbortError" || error.message.includes("abort"));
+    breaker.recordFailure();
+    recordUpstreamMetric("gemini", false, Date.now() - startTime);
+
+    const httpStatus = extractHttpStatus(error);
+    if (httpStatus !== undefined) {
+      return {
+        output: generateDeterministicFallback(input),
+        isFallback: true,
+        fallbackReason: `GEMINI_HTTP_${httpStatus}`,
+        executionDurationMs: Date.now() - startTime,
+      };
+    }
 
     return {
       output: generateDeterministicFallback(input),
       isFallback: true,
-      fallbackReason: isAbort ? "TIMEOUT_EXCEEDED (>3.5s)" : "NETWORK_ERROR",
+      fallbackReason: isAbortOrTimeoutError(error)
+        ? "TIMEOUT_EXCEEDED (>3.5s)"
+        : "NETWORK_ERROR",
       executionDurationMs: Date.now() - startTime,
     };
   }

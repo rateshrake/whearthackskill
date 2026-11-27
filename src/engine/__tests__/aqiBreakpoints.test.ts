@@ -332,5 +332,46 @@ describe("Module 1: aqiBreakpoints", () => {
       expect(classifyUsEpaAqi(250)).toBe("Very Unhealthy");
       expect(classifyUsEpaAqi(400)).toBe("Hazardous");
     });
+
+    it("should clamp negative inputs to 0 and characterize extreme >500 extrapolation", () => {
+      const negCpcb = calculateCpcbSubIndex("PM2.5", -12);
+      expect(negCpcb.concentration).toBe(0);
+      expect(negCpcb.subIndex).toBe(0);
+
+      const negEpa = calculateUsEpa2024Pm25Aqi(-5);
+      expect(negEpa.concentration).toBe(0);
+      expect(negEpa.aqi).toBe(0);
+
+      const extremeEpa = calculateUsEpa2024Pm25Aqi(700);
+      expect(extremeEpa.aqi).toBe(500);
+      expect(extremeEpa.rawAqi).toBeGreaterThan(500);
+      expect(extremeEpa.isCapped).toBe(true);
+    });
+
+    it("should maintain strict monotonicity across inter-bracket gaps and reject non-finite inputs", () => {
+      // CPCB PM2.5 gap 30..31: must never drop below 50
+      expect(calculateCpcbSubIndex("PM2.5", 30).subIndex).toBe(50);
+      expect(calculateCpcbSubIndex("PM2.5", 30.1).subIndex).toBeGreaterThanOrEqual(50);
+      expect(calculateCpcbSubIndex("PM2.5", 30.9).subIndex).toBeLessThanOrEqual(51);
+      expect(calculateCpcbSubIndex("PM2.5", 60.1).subIndex).toBeGreaterThanOrEqual(100);
+      expect(calculateCpcbSubIndex("CO", 1.01).subIndex).toBeGreaterThanOrEqual(50);
+
+      // US EPA gap 9.0..9.1
+      expect(calculateUsEpa2024Pm25Aqi(9.0).aqi).toBe(50);
+      expect(calculateUsEpa2024Pm25Aqi(9.04).aqi).toBeGreaterThanOrEqual(50);
+      expect(calculateUsEpa2024Pm25Aqi(9.09).aqi).toBeLessThanOrEqual(51);
+
+      // Reject NaN/Infinity on single-pollutant calculators and ignore Infinity in multi-pollutant
+      expect(() => calculateCpcbSubIndex("PM2.5", Number.NaN)).toThrow(RangeError);
+      expect(() => calculateUsEpa2024Pm25Aqi(Number.POSITIVE_INFINITY)).toThrow(
+        RangeError,
+      );
+      const multiWithInfinity = calculateCpcbAqi({
+        pm25: 50,
+        pm10: Number.POSITIVE_INFINITY,
+      });
+      expect(multiWithInfinity.criticalPollutant).toBe("PM2.5");
+      expect(multiWithInfinity.subIndices["PM10"]).toBeUndefined();
+    });
   });
 });

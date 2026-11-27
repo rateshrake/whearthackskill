@@ -8,6 +8,7 @@ import {
   UpwindContextCard,
   CommunityHub,
   AttributionFooter,
+  ErrorBoundary,
 } from "../index";
 import {
   calculateCpcbAqi,
@@ -180,6 +181,8 @@ describe("Frontend UI Components Integration & Accessibility", () => {
 
       expect(html).toContain("Indoor Single-Zone Mass Balance Shelter Audit");
       expect(html).toContain("Required CADR (m³/h)");
+      expect(html).toContain("CADR Sizing for ≤ 21% Infiltration");
+      expect(html).not.toContain("&amp;le;");
       expect(html).toContain("Open Windows Baseline");
       expect(html).toContain("Closed Windows + Sized HEPA Purifier");
       expect(html).toContain("Acute Indoor Combustion Spike Estimator");
@@ -287,6 +290,18 @@ describe("Frontend UI Components Integration & Accessibility", () => {
 
       expect(html).toContain("डेटा स्रोत व वैज्ञानिक आभार");
       expect(html).toContain("Medical Disclaimer");
+    });
+  });
+
+  describe("ErrorBoundary", () => {
+    it("renders children cleanly when no error is thrown and exposes getDerivedStateFromError", () => {
+      const html = renderToString(
+        <ErrorBoundary fallbackTitle="Test Fallback">
+          <div>Healthy Panel</div>
+        </ErrorBoundary>,
+      );
+      expect(html).toContain("Healthy Panel");
+      expect(ErrorBoundary.getDerivedStateFromError()).toEqual({ hasError: true });
     });
   });
 });

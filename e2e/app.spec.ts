@@ -232,9 +232,12 @@ function createDeterministicFixture(
 }
 
 test.describe("VayuShield E2E & Accessibility Hardening Suite", () => {
-  test.beforeEach(async ({ context }) => {
+  test.beforeEach(async ({ context, page }) => {
     // Grant clipboard permissions for automated test execution
     await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    page.on("pageerror", (err) => {
+      throw new Error(`Uncaught browser pageerror: ${err.message}`);
+    });
   });
 
   test("Scenario A: Severe Delhi Winter Smog (GRAP Stage IV, Upwind Fires, Zero-Latency Controls, Zero Axe Violations)", async ({

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useId } from "react";
+import React, { useState, useEffect, useId } from "react";
 import {
   calculateRoomVolume,
   modelSteadyStateIndoorPm25,
@@ -40,6 +40,17 @@ export function IndoorShelterCard({
   const [selectedCombustion, setSelectedCombustion] =
     useState<CombustionEventType>("mosquito_coil");
 
+  // Sync local sliders when persisted room dimensions hydrate asynchronously from localStorage
+  useEffect(() => {
+    setLengthMeters(initialRoomDimensions.lengthMeters);
+    setWidthMeters(initialRoomDimensions.widthMeters);
+    setHeightMeters(initialRoomDimensions.heightMeters);
+  }, [
+    initialRoomDimensions.lengthMeters,
+    initialRoomDimensions.widthMeters,
+    initialRoomDimensions.heightMeters,
+  ]);
+
   // IDs for accessibility labels
   const lengthId = useId();
   const widthId = useId();
@@ -49,6 +60,7 @@ export function IndoorShelterCard({
   const roomVolumeM3 = calculateRoomVolume(dimensions);
 
   const handleDimensionChange = (field: keyof RoomDimensions, val: number) => {
+    if (!Number.isFinite(val) || val <= 0) return;
     const updated = { ...dimensions, [field]: val };
     if (field === "lengthMeters") setLengthMeters(val);
     if (field === "widthMeters") setWidthMeters(val);

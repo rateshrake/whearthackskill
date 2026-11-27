@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useId } from "react";
+import React, { useState, useEffect, useRef, useId } from "react";
 import {
   mapAqiToGrapStage,
   calculateCommuteDeltas,
@@ -47,6 +47,16 @@ export function CommunityHub({
 
   // Clipboard Copied State
   const [copied, setCopied] = useState<boolean>(false);
+  const [copyError, setCopyError] = useState<boolean>(false);
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current !== null) {
+        clearTimeout(copyTimerRef.current);
+      }
+    };
+  }, []);
 
   const distanceId = useId();
 
@@ -79,10 +89,15 @@ export function CommunityHub({
   const handleCopyAdvisory = async () => {
     try {
       await navigator.clipboard.writeText(fullAdvisoryText);
+      setCopyError(false);
       setCopied(true);
-      setTimeout(() => setCopied(false), 3000);
+      if (copyTimerRef.current !== null) {
+        clearTimeout(copyTimerRef.current);
+      }
+      copyTimerRef.current = setTimeout(() => setCopied(false), 3000);
     } catch {
-      // Fallback
+      setCopied(false);
+      setCopyError(true);
     }
   };
 
@@ -147,8 +162,8 @@ export function CommunityHub({
             {t.citizenMandateTitle}
           </h4>
           <div className="space-y-2 text-xs">
-            {grapStage.citizenChecklist.map((item, idx) => (
-              <div key={idx} className="flex items-start gap-2.5 text-neutral-300">
+            {grapStage.citizenChecklist.map((item) => (
+              <div key={item.id} className="flex items-start gap-2.5 text-neutral-300">
                 <CheckCircle2
                   className="h-4 w-4 text-emerald-400 flex-shrink-0 mt-0.5"
                   aria-hidden="true"
@@ -166,8 +181,8 @@ export function CommunityHub({
               {t.rwaMandateTitle}
             </h4>
             <div className="space-y-2 text-xs">
-              {grapStage.rwaChecklist.map((item, idx) => (
-                <div key={idx} className="flex items-start gap-2.5 text-neutral-300">
+              {grapStage.rwaChecklist.map((item) => (
+                <div key={item.id} className="flex items-start gap-2.5 text-neutral-300">
                   <Shield
                     className="h-4 w-4 text-purple-400 flex-shrink-0 mt-0.5"
                     aria-hidden="true"
@@ -211,7 +226,12 @@ export function CommunityHub({
             max="60"
             step="1"
             value={commuteDistanceKm}
-            onChange={(e) => setCommuteDistanceKm(parseInt(e.target.value, 10))}
+            onChange={(e) => {
+              const parsed = Number.parseInt(e.target.value, 10);
+              if (Number.isFinite(parsed)) {
+                setCommuteDistanceKm(parsed);
+              }
+            }}
             className="w-full"
             aria-label={`${t.commuteDistanceLabel}: ${commuteDistanceKm} km`}
           />
@@ -292,7 +312,9 @@ export function CommunityHub({
         <div className="flex flex-wrap items-center gap-3">
           <button
             type="button"
-            onClick={handleCopyAdvisory}
+            onClick={() => {
+              void handleCopyAdvisory();
+            }}
             className="px-5 py-2.5 rounded-xl bg-emerald-800 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-2 shadow-lg transition-all focus:outline-none focus:ring-2 focus:ring-emerald-400"
           >
             {copied ? (
@@ -319,7 +341,7 @@ export function CommunityHub({
           </a>
 
           <a
-            href={`https://t.me/share/url?url=${encodeURIComponent("https://vayushield.local")}&text=${encodeURIComponent(fullAdvisoryText)}`}
+            href={`https://t.me/share/url?url=${encodeURIComponent("https://vayushield.app")}&text=${encodeURIComponent(fullAdvisoryText)}`}
             target="_blank"
             rel="noopener noreferrer"
             className="px-4 py-2.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.1] text-white font-medium text-xs flex items-center gap-2 transition-all"
@@ -327,6 +349,12 @@ export function CommunityHub({
             <Share2 className="h-4 w-4 text-sky-400" aria-hidden="true" />
             <span>{t.shareTelegramButton}</span>
           </a>
+
+          {copyError && (
+            <span role="status" className="text-xs font-mono text-amber-300">
+              Clipboard access blocked; copy text from preview above.
+            </span>
+          )}
 
           <div className="flex items-center gap-1.5 text-xs font-mono text-neutral-400 ml-auto">
             <PhoneCall className="h-3.5 w-3.5 text-sky-400" aria-hidden="true" />

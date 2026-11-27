@@ -342,7 +342,7 @@ export const COMMUTE_MODE_PROFILES: Record<CommuteMode, CommuteModeProfile> = {
  * Maps CPCB AQI value to official Delhi-NCR GRAP Stage.
  */
 export function mapAqiToGrapStage(cpcbAqi: number): GrapStageDetails {
-  const aqi = Math.max(0, cpcbAqi);
+  const aqi = Number.isFinite(cpcbAqi) ? Math.max(0, cpcbAqi) : 0;
   if (aqi <= 200) {
     return GRAP_STAGES.stage_0;
   }
@@ -373,8 +373,10 @@ export function calculateCommuteDeltas(
   chosenMode: CommuteMode,
   baselineMode: CommuteMode = "private_petrol_car",
 ): CommuteDeltaResult {
-  const km = Math.max(0, roundTripKm);
-  const ambient = Math.max(0, ambientOutdoorPm25);
+  const km = Number.isFinite(roundTripKm) ? Math.max(0, roundTripKm) : 0;
+  const ambient = Number.isFinite(ambientOutdoorPm25)
+    ? Math.max(0, ambientOutdoorPm25)
+    : 0;
 
   const chosenProfile = COMMUTE_MODE_PROFILES[chosenMode];
   const baselineProfile = COMMUTE_MODE_PROFILES[baselineMode];

@@ -2,13 +2,16 @@
  * VayuShield Backend Services
  * Module: rateLimiter.ts
  *
- * Sliding-window in-memory per-IP rate limiter for serverless & Cloud Run containers.
- * Enforces e.g. 30 requests / minute / IP and returns structured HTTP 429 payload.
+ * Bounded sliding-window in-memory per-IP rate limiter for serverless & Cloud Run containers.
+ * Enforces maxRequests / windowMs per client IP with automatic stale purging and
+ * bounded Map capacity to prevent memory exhaustion under spoofed IP floods.
  */
 
 export interface RateLimitConfig {
   maxRequests: number; // default: 30 requests
   windowMs: number; // default: 60,000 ms (1 minute)
+  maxEntries: number; // default: 10,000 tracked IPs
+  purgeEveryChecks: number; // default: 100 checks between automatic sweeps
 }
 
 export interface RateLimitResult {
@@ -18,28 +21,51 @@ export interface RateLimitResult {
   resetSeconds: number;
 }
 
+export interface RateLimiterStats {
+  trackedKeys: number;
+  maxEntries: number;
+  maxRequests: number;
+  windowMs: number;
+  evictions: number;
+}
+
 export class SlidingWindowRateLimiter {
   private readonly hits: Map<string, number[]>;
   private readonly maxRequests: number;
   private readonly windowMs: number;
+  private readonly maxEntries: number;
+  private readonly purgeEveryChecks: number;
+  private checkCounter = 0;
+  private evictionsCount = 0;
 
   constructor(config: Partial<RateLimitConfig> = {}) {
     this.hits = new Map();
-    this.maxRequests = config.maxRequests ?? 30;
-    this.windowMs = config.windowMs ?? 60 * 1000;
+    this.maxRequests = Math.max(1, config.maxRequests ?? 30);
+    this.windowMs = Math.max(1000, config.windowMs ?? 60 * 1000);
+    this.maxEntries = Math.max(1, config.maxEntries ?? 10_000);
+    this.purgeEveryChecks = Math.max(1, config.purgeEveryChecks ?? 100);
   }
 
   /**
    * Evaluates if the IP is allowed to proceed under the current sliding window.
    */
   check(ip: string): RateLimitResult {
+    const key = ip.trim() || "unknown";
     const now = Date.now();
     const windowStart = now - this.windowMs;
 
-    // Retrieve existing timestamps and filter out those outside current sliding window
-    const timestamps = (this.hits.get(ip) ?? []).filter((t) => t > windowStart);
+    if (++this.checkCounter >= this.purgeEveryChecks) {
+      this.checkCounter = 0;
+      this.purgeStale(now);
+    }
+
+    const timestamps = (this.hits.get(key) ?? []).filter((t) => t > windowStart);
 
     if (timestamps.length >= this.maxRequests) {
+      // Persist pruned window and refresh LRU position for active blocked key
+      this.hits.delete(key);
+      this.hits.set(key, timestamps);
+
       const oldestInWindow = timestamps[0] ?? now;
       const resetSeconds = Math.max(
         1,
@@ -54,9 +80,21 @@ export class SlidingWindowRateLimiter {
       };
     }
 
-    // Record this hit
+    if (!this.hits.has(key) && this.hits.size >= this.maxEntries) {
+      this.purgeStale(now);
+      if (this.hits.size >= this.maxEntries) {
+        const oldestKey = this.hits.keys().next().value;
+        if (oldestKey !== undefined) {
+          this.hits.delete(oldestKey);
+          this.evictionsCount++;
+        }
+      }
+    }
+
+    // Record hit and refresh LRU insertion order
     timestamps.push(now);
-    this.hits.set(ip, timestamps);
+    this.hits.delete(key);
+    this.hits.set(key, timestamps);
 
     const remaining = this.maxRequests - timestamps.length;
     const oldestInWindow = timestamps[0] ?? now;
@@ -74,29 +112,49 @@ export class SlidingWindowRateLimiter {
   }
 
   /**
-   * Resets rate limiter memory.
+   * Resets rate limiter memory and counters.
    */
   reset(): void {
     this.hits.clear();
+    this.checkCounter = 0;
+    this.evictionsCount = 0;
   }
 
   /**
-   * Periodic garbage collector to prune stale IPs.
+   * Prunes expired IP buckets from memory.
    */
-  purgeStale(): void {
-    const windowStart = Date.now() - this.windowMs;
+  purgeStale(now = Date.now()): number {
+    const windowStart = now - this.windowMs;
+    let purged = 0;
     for (const [ip, timestamps] of this.hits.entries()) {
       const valid = timestamps.filter((t) => t > windowStart);
       if (valid.length === 0) {
         this.hits.delete(ip);
+        purged++;
       } else {
         this.hits.set(ip, valid);
       }
     }
+    return purged;
+  }
+
+  /**
+   * Returns runtime capacity & saturation stats for health diagnostics.
+   */
+  getStats(): RateLimiterStats {
+    return {
+      trackedKeys: this.hits.size,
+      maxEntries: this.maxEntries,
+      maxRequests: this.maxRequests,
+      windowMs: this.windowMs,
+      evictions: this.evictionsCount,
+    };
   }
 }
 
 export const globalRateLimiter = new SlidingWindowRateLimiter({
   maxRequests: 30,
   windowMs: 60 * 1000,
+  maxEntries: 10_000,
+  purgeEveryChecks: 100,
 });

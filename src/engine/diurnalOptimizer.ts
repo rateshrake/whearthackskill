@@ -124,9 +124,15 @@ export function correctOpticalHygroscopicGrowth(
   pm25: number,
   humidityPct?: number | undefined,
 ): { adjustedPm25: number; wasAdjusted: boolean; hygroscopicFactor: number } {
-  if (humidityPct === undefined || humidityPct <= 75 || humidityPct >= 100) {
+  const safePm25 = Number.isFinite(pm25) ? Math.max(0, pm25) : 0;
+  if (
+    humidityPct === undefined ||
+    !Number.isFinite(humidityPct) ||
+    humidityPct <= 75 ||
+    humidityPct >= 100
+  ) {
     return {
-      adjustedPm25: pm25,
+      adjustedPm25: safePm25,
       wasAdjusted: false,
       hygroscopicFactor: 1.0,
     };
@@ -135,7 +141,7 @@ export function correctOpticalHygroscopicGrowth(
   const rh = humidityPct / 100;
   const kappa = 0.25;
   const hygroscopicFactor = 1.0 + kappa * ((rh * rh) / (1.0 - rh));
-  const adjustedPm25 = Number((pm25 / hygroscopicFactor).toFixed(2));
+  const adjustedPm25 = Number((safePm25 / hygroscopicFactor).toFixed(2));
 
   return {
     adjustedPm25,
@@ -152,21 +158,25 @@ export function processDiurnalObservations(
   applyHumidityCorrection = true,
 ): ProcessedObservation[] {
   return observations.map((obs) => {
+    const safePm25 = Number.isFinite(obs.pm25) ? Math.max(0, obs.pm25) : 0;
+    const safePm10 = Number.isFinite(obs.pm10) ? Math.max(0, obs.pm10) : 0;
     const correction =
       applyHumidityCorrection && obs.humidityPct !== undefined
-        ? correctOpticalHygroscopicGrowth(obs.pm25, obs.humidityPct)
+        ? correctOpticalHygroscopicGrowth(safePm25, obs.humidityPct)
         : {
-            adjustedPm25: obs.pm25,
+            adjustedPm25: safePm25,
             wasAdjusted: false,
             hygroscopicFactor: 1.0,
           };
 
     return {
       timestampIso: obs.timestampIso,
-      rawPm25: obs.pm25,
+      rawPm25: safePm25,
       adjustedPm25: correction.adjustedPm25,
-      rawPm10: obs.pm10,
-      ...(obs.humidityPct !== undefined ? { humidityPct: obs.humidityPct } : {}),
+      rawPm10: safePm10,
+      ...(obs.humidityPct !== undefined && Number.isFinite(obs.humidityPct)
+        ? { humidityPct: obs.humidityPct }
+        : {}),
       wasHumidityAdjusted: correction.wasAdjusted,
       hygroscopicFactor: correction.hygroscopicFactor,
     };
@@ -175,13 +185,18 @@ export function processDiurnalObservations(
 
 /**
  * Computes rolling 2-hour average exposure windows across a 48-hour time series.
- * Groups windows into "today" (first 24h) and "tomorrow" (next 24h).
+ * Filters invalid timestamps, sorts chronologically without mutating input, and
+ * groups windows into "today" (first 24h) and "tomorrow" (next 24h).
  */
 export function computeRollingDiurnalWindows(
   observations: readonly DiurnalObservation[],
   options: { applyHumidityCorrection?: boolean | undefined } = {},
 ): DiurnalOptimizationResult {
-  if (observations.length === 0) {
+  const validSorted = observations
+    .filter((obs) => Number.isFinite(Date.parse(obs.timestampIso)))
+    .toSorted((a, b) => Date.parse(a.timestampIso) - Date.parse(b.timestampIso));
+
+  if (validSorted.length === 0) {
     return {
       windows: [],
       cleanestToday: null,
@@ -193,7 +208,7 @@ export function computeRollingDiurnalWindows(
   }
 
   const applyCorrection = options.applyHumidityCorrection ?? true;
-  const processed = processDiurnalObservations(observations, applyCorrection);
+  const processed = processDiurnalObservations(validSorted, applyCorrection);
 
   let humidityAdjustmentCount = 0;
   for (const obs of processed) {
@@ -202,23 +217,18 @@ export function computeRollingDiurnalWindows(
     }
   }
 
-  // Determine split point for today vs tomorrow based on timestamp or index
-  const baseTime = new Date(processed[0]?.timestampIso ?? 0).getTime();
+  const baseTime = Date.parse(processed[0]!.timestampIso);
   const dayMs = 24 * 60 * 60 * 1000;
-
   const windows: ExposureWindow[] = [];
 
-  // Rolling 2-hour windows (spanning observations within [t, t + 2h])
   for (let i = 0; i < processed.length - 1; i++) {
-    const current = processed[i];
-    if (!current) continue;
-
-    const tCurrent = new Date(current.timestampIso).getTime();
+    const current = processed[i]!;
+    const tCurrent = Date.parse(current.timestampIso);
     const windowPoints: ProcessedObservation[] = [];
 
     for (let j = i; j < processed.length; j++) {
       const pt = processed[j]!;
-      const ptTime = new Date(pt.timestampIso).getTime();
+      const ptTime = Date.parse(pt.timestampIso);
       const diffHours = (ptTime - tCurrent) / (1000 * 60 * 60);
       if (diffHours <= 2.05) {
         windowPoints.push(pt);
@@ -229,8 +239,8 @@ export function computeRollingDiurnalWindows(
 
     if (windowPoints.length < 2) continue;
 
-    const lastPoint = windowPoints[windowPoints.length - 1];
-    const endTimeIso = lastPoint ? lastPoint.timestampIso : current.timestampIso;
+    const lastPoint = windowPoints[windowPoints.length - 1]!;
+    const endTimeIso = lastPoint.timestampIso;
 
     let sumAdjustedPm25 = 0;
     let sumRawPm25 = 0;
@@ -251,9 +261,8 @@ export function computeRollingDiurnalWindows(
     const avgRawPm25 = Number((sumRawPm25 / sampleCount).toFixed(2));
     const avgPm10 = Number((sumPm10 / sampleCount).toFixed(2));
 
-    const windowStartTime = new Date(current.timestampIso).getTime();
     const dayTag: "today" | "tomorrow" =
-      windowStartTime - baseTime < dayMs ? "today" : "tomorrow";
+      tCurrent - baseTime < dayMs ? "today" : "tomorrow";
 
     windows.push({
       startTimeIso: current.timestampIso,
@@ -267,7 +276,6 @@ export function computeRollingDiurnalWindows(
     });
   }
 
-  // Find extremes for today and tomorrow
   const todayWindows = windows.filter((w) => w.day === "today");
   const tomorrowWindows = windows.filter((w) => w.day === "tomorrow");
 
@@ -305,10 +313,6 @@ export function computeRollingDiurnalWindows(
 /**
  * Calculates Respiratory Dose (inhaled mass in µg) and compares
  * baseline (peak/worst) exposure window against shifted (cleanest) window.
- *
- * Formula:
- * Inhaled Air Volume (m³) = V_E (L/min) * Duration (min) * 10^-3 (m³/L)
- * Inhaled Dose (µg) = Concentration (µg/m³) * Inhaled Air Volume (m³)
  */
 export function calculateRespiratoryDose(
   baselineWindow: ExposureWindow,
@@ -316,18 +320,23 @@ export function calculateRespiratoryDose(
   archetype: HouseholdArchetype,
   durationMinutes = 120, // 2-hour window default
 ): RespiratoryDoseComparison {
+  if (!Number.isFinite(durationMinutes) || durationMinutes < 0) {
+    throw new RangeError("durationMinutes must be a finite non-negative number.");
+  }
   const profile = HOUSEHOLD_ARCHETYPES[archetype];
   const veLpm = profile.minuteVentilationLpm;
+  const safeBaselinePm25 = Number.isFinite(baselineWindow.averagePm25)
+    ? Math.max(0, baselineWindow.averagePm25)
+    : 0;
+  const safeShiftedPm25 = Number.isFinite(shiftedWindow.averagePm25)
+    ? Math.max(0, shiftedWindow.averagePm25)
+    : 0;
 
   // Inhaled air volume in m³
   const inhaledAirVolumeM3 = (veLpm * durationMinutes) / 1000;
 
-  const baselineDoseUg = Number(
-    (baselineWindow.averagePm25 * inhaledAirVolumeM3).toFixed(2),
-  );
-  const shiftedDoseUg = Number(
-    (shiftedWindow.averagePm25 * inhaledAirVolumeM3).toFixed(2),
-  );
+  const baselineDoseUg = Number((safeBaselinePm25 * inhaledAirVolumeM3).toFixed(2));
+  const shiftedDoseUg = Number((safeShiftedPm25 * inhaledAirVolumeM3).toFixed(2));
 
   const reductionUg = Number((baselineDoseUg - shiftedDoseUg).toFixed(2));
   const percentReduction =

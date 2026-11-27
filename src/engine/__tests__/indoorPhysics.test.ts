@@ -30,6 +30,23 @@ describe("Module 3: indoorPhysics", () => {
       expect(() =>
         calculateRoomVolume({ lengthMeters: 5, widthMeters: -2, heightMeters: 3 }),
       ).toThrow();
+
+      expect(() =>
+        calculateRoomVolume({
+          lengthMeters: Number.NaN,
+          widthMeters: 4,
+          heightMeters: 3,
+        }),
+      ).toThrow("Room dimensions must be positive non-zero numbers.");
+
+      expect(() =>
+        estimateCombustionSpike(
+          "incense_stick",
+          standardBedroom,
+          25,
+          Number.POSITIVE_INFINITY,
+        ),
+      ).toThrow(RangeError);
     });
   });
 

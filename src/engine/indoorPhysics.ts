@@ -166,11 +166,24 @@ export const COMBUSTION_EVENT_PROFILES: Record<
  * Calculates Room Volume in cubic meters (V = L * W * H).
  */
 export function calculateRoomVolume(dims: RoomDimensions): number {
-  if (dims.lengthMeters <= 0 || dims.widthMeters <= 0 || dims.heightMeters <= 0) {
+  if (
+    !Number.isFinite(dims.lengthMeters) ||
+    !Number.isFinite(dims.widthMeters) ||
+    !Number.isFinite(dims.heightMeters) ||
+    dims.lengthMeters <= 0 ||
+    dims.widthMeters <= 0 ||
+    dims.heightMeters <= 0
+  ) {
     throw new Error("Room dimensions must be positive non-zero numbers.");
   }
   return Number((dims.lengthMeters * dims.widthMeters * dims.heightMeters).toFixed(2));
 }
+
+const VENTILATION_MODE_PARAMS: Record<IndoorVentilationMode, MassBalanceParameters> = {
+  open_windows: MASS_BALANCE_PHYSICS.OPEN_WINDOWS,
+  closed_windows_no_filter: MASS_BALANCE_PHYSICS.CLOSED_NO_FILTER,
+  closed_windows_hepa: MASS_BALANCE_PHYSICS.CLOSED_NO_FILTER,
+};
 
 /**
  * Models steady-state indoor PM2.5 concentration using single-zone mass balance:
@@ -184,34 +197,22 @@ export function modelSteadyStateIndoorPm25(
   mode: IndoorVentilationMode,
   customCadrM3h = 0,
 ): SteadyStateIndoorResult {
-  const volume = calculateRoomVolume(roomDims);
-  const cOut = Math.max(0, outdoorPm25);
-
-  let p: number = MASS_BALANCE_PHYSICS.OPEN_WINDOWS.penetrationCoefficient;
-  let lambdaV: number = MASS_BALANCE_PHYSICS.OPEN_WINDOWS.airExchangeRateAch;
-  let kDep: number = MASS_BALANCE_PHYSICS.OPEN_WINDOWS.depositionRatePerHr;
-  let cadr = 0;
-
-  if (mode === "open_windows") {
-    p = MASS_BALANCE_PHYSICS.OPEN_WINDOWS.penetrationCoefficient;
-    lambdaV = MASS_BALANCE_PHYSICS.OPEN_WINDOWS.airExchangeRateAch;
-    kDep = MASS_BALANCE_PHYSICS.OPEN_WINDOWS.depositionRatePerHr;
-    cadr = 0;
-  } else if (mode === "closed_windows_no_filter") {
-    p = MASS_BALANCE_PHYSICS.CLOSED_NO_FILTER.penetrationCoefficient;
-    lambdaV = MASS_BALANCE_PHYSICS.CLOSED_NO_FILTER.airExchangeRateAch;
-    kDep = MASS_BALANCE_PHYSICS.CLOSED_NO_FILTER.depositionRatePerHr;
-    cadr = 0;
-  } else if (mode === "closed_windows_hepa") {
-    p = MASS_BALANCE_PHYSICS.CLOSED_NO_FILTER.penetrationCoefficient;
-    lambdaV = MASS_BALANCE_PHYSICS.CLOSED_NO_FILTER.airExchangeRateAch;
-    kDep = MASS_BALANCE_PHYSICS.CLOSED_NO_FILTER.depositionRatePerHr;
-    cadr = Math.max(0, customCadrM3h);
+  if (!Number.isFinite(outdoorPm25)) {
+    throw new RangeError("outdoorPm25 must be a finite number.");
+  }
+  if (!Number.isFinite(customCadrM3h)) {
+    throw new RangeError("customCadrM3h must be a finite number.");
   }
 
+  const volume = calculateRoomVolume(roomDims);
+  const cOut = Math.max(0, outdoorPm25);
+  const params = VENTILATION_MODE_PARAMS[mode];
+  const cadr = mode === "closed_windows_hepa" ? Math.max(0, customCadrM3h) : 0;
+
   const cadrAch = cadr / volume;
-  const totalLoss = lambdaV + kDep + cadrAch;
-  const infiltrationRatio = (p * lambdaV) / totalLoss;
+  const totalLoss = params.airExchangeRateAch + params.depositionRatePerHr + cadrAch;
+  const infiltrationRatio =
+    (params.penetrationCoefficient * params.airExchangeRateAch) / totalLoss;
   const indoorPm25 = Number((cOut * infiltrationRatio).toFixed(2));
 
   return {
@@ -244,6 +245,22 @@ export function calculateRequiredCadr(
     targetIndoorPm25?: number | undefined;
   } = {},
 ): TargetCadrResult {
+  if (!Number.isFinite(outdoorPm25)) {
+    throw new RangeError("outdoorPm25 must be a finite number.");
+  }
+  if (
+    targetOptions.targetInfiltrationRatio !== undefined &&
+    !Number.isFinite(targetOptions.targetInfiltrationRatio)
+  ) {
+    throw new RangeError("targetInfiltrationRatio must be a finite number.");
+  }
+  if (
+    targetOptions.targetIndoorPm25 !== undefined &&
+    !Number.isFinite(targetOptions.targetIndoorPm25)
+  ) {
+    throw new RangeError("targetIndoorPm25 must be a finite number.");
+  }
+
   const volume = calculateRoomVolume(roomDims);
   const cOut = Math.max(0, outdoorPm25);
 
@@ -263,7 +280,7 @@ export function calculateRequiredCadr(
     return {
       roomVolumeM3: volume,
       outdoorPm25: cOut,
-      targetPm25: Number((targetPm25 ?? 0).toFixed(1)),
+      targetPm25: Number(Math.max(0, targetPm25 ?? 0).toFixed(1)),
       targetInfiltrationRatio: Number(naturalInfiltrationRatio.toFixed(4)),
       requiredCadrM3h: 0,
       requiredCadrCfm: 0,
@@ -274,6 +291,7 @@ export function calculateRequiredCadr(
   }
 
   if (targetPm25 !== undefined) {
+    targetPm25 = Math.max(0, targetPm25);
     targetRatio = Math.min(targetRatio, targetPm25 / cOut);
   } else {
     targetPm25 = Number((cOut * targetRatio).toFixed(2));
@@ -336,27 +354,31 @@ export function estimateCombustionSpike(
   baselineIndoorPm25 = 25.0,
   hepaCadrM3h = 250.0,
 ): CombustionSpikeEstimate {
+  if (!Number.isFinite(baselineIndoorPm25) || !Number.isFinite(hepaCadrM3h)) {
+    throw new RangeError("baselineIndoorPm25 and hepaCadrM3h must be finite numbers.");
+  }
+
   const volume = calculateRoomVolume(roomDims);
   const profile = COMBUSTION_EVENT_PROFILES[eventType];
+  const safeBaseline = Math.max(0, baselineIndoorPm25);
+  const safeHepaCadr = Math.max(0, hepaCadrM3h);
 
   // Scale spike concentration inversely with room volume (reference 35 m³)
   const referenceVolume = 35.0;
   const scaledSpikeUgM3 = Number(
     (profile.peakSpikeAddedUgM3 * (referenceVolume / volume)).toFixed(2),
   );
-  const peakTotalIndoorPm25 = Number((baselineIndoorPm25 + scaledSpikeUgM3).toFixed(2));
+  const peakTotalIndoorPm25 = Number((safeBaseline + scaledSpikeUgM3).toFixed(2));
 
   // Recovery target: baseline + 10% of spike (i.e. 90% cleared)
-  const recoveryTargetPm25 = Number(
-    (baselineIndoorPm25 + 0.1 * scaledSpikeUgM3).toFixed(2),
-  );
+  const recoveryTargetPm25 = Number((safeBaseline + 0.1 * scaledSpikeUgM3).toFixed(2));
 
   // Loss constants k_total (h^-1)
   const kClosedNoFilter =
     MASS_BALANCE_PHYSICS.CLOSED_NO_FILTER.airExchangeRateAch +
     MASS_BALANCE_PHYSICS.CLOSED_NO_FILTER.depositionRatePerHr; // 0.72 h^-1
 
-  const hepaAch = hepaCadrM3h / volume;
+  const hepaAch = safeHepaCadr / volume;
   const kClosedHepa = kClosedNoFilter + hepaAch;
 
   const kRapidFlush =
@@ -384,7 +406,7 @@ export function estimateCombustionSpike(
   return {
     event: profile,
     roomVolumeM3: volume,
-    baselineIndoorPm25,
+    baselineIndoorPm25: safeBaseline,
     peakSpikeConcentrationUgM3: scaledSpikeUgM3,
     peakTotalIndoorPm25,
     recoveryTimesMinutes: {

@@ -14,6 +14,7 @@ import {
   UpwindContextCard,
   CommunityHub,
   AttributionFooter,
+  ErrorBoundary,
 } from "@/components";
 import type { AirIntelligencePayload } from "@/services/airQualityAggregator";
 import type { AdvisorExecutionResult } from "@/services/geminiAdvisor";
@@ -83,13 +84,28 @@ export default function VayuShieldHome() {
 
       const savedDims = localStorage.getItem("vayushield_room_dims");
       if (savedDims) {
-        const parsed = JSON.parse(savedDims);
+        const parsed: unknown = JSON.parse(savedDims);
         if (
+          parsed !== null &&
+          typeof parsed === "object" &&
+          !Array.isArray(parsed) &&
+          "lengthMeters" in parsed &&
+          "widthMeters" in parsed &&
+          "heightMeters" in parsed &&
           typeof parsed.lengthMeters === "number" &&
           typeof parsed.widthMeters === "number" &&
-          typeof parsed.heightMeters === "number"
+          typeof parsed.heightMeters === "number" &&
+          Number.isFinite(parsed.lengthMeters) &&
+          Number.isFinite(parsed.widthMeters) &&
+          Number.isFinite(parsed.heightMeters)
         ) {
-          setRoomDimensions(parsed);
+          const clamp = (val: number, min: number, max: number) =>
+            Math.min(max, Math.max(min, val));
+          setRoomDimensions({
+            lengthMeters: clamp(parsed.lengthMeters, 2.5, 12.0),
+            widthMeters: clamp(parsed.widthMeters, 2.5, 10.0),
+            heightMeters: clamp(parsed.heightMeters, 2.4, 4.5),
+          });
         }
       }
     } catch {
@@ -132,9 +148,17 @@ export default function VayuShieldHome() {
     archetypeRef.current = selectedArchetype;
   }, [selectedArchetype]);
 
-  // 5. Fetch Environmental Intelligence from /api/intelligence
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const requestSeqRef = useRef<number>(0);
+
+  // 5. Fetch Environmental Intelligence from /api/intelligence (cancels stale requests)
   const fetchIntelligence = useCallback(
     async (city: CityPreset, lang: SupportedLanguage) => {
+      abortControllerRef.current?.abort();
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+      const requestId = ++requestSeqRef.current;
+
       setIsLoading(true);
       setError(null);
 
@@ -146,7 +170,9 @@ export default function VayuShieldHome() {
           archetype: archetypeRef.current,
         });
 
-        const res = await fetch(`/api/intelligence?${params.toString()}`);
+        const res = await fetch(`/api/intelligence?${params.toString()}`, {
+          signal: controller.signal,
+        });
         if (!res.ok) {
           throw new Error(`Upstream API responded with HTTP ${res.status}`);
         }
@@ -156,13 +182,22 @@ export default function VayuShieldHome() {
           advisor: AdvisorExecutionResult;
         };
 
-        setIntelligence(data.intelligence);
-        setAdvisor(data.advisor);
+        if (requestId === requestSeqRef.current) {
+          setIntelligence(data.intelligence);
+          setAdvisor(data.advisor);
+        }
       } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : "Failed to load air data";
-        setError(msg);
+        if (err instanceof Error && err.name === "AbortError") {
+          return;
+        }
+        if (requestId === requestSeqRef.current) {
+          const msg = err instanceof Error ? err.message : "Failed to load air data";
+          setError(msg);
+        }
       } finally {
-        setIsLoading(false);
+        if (requestId === requestSeqRef.current) {
+          setIsLoading(false);
+        }
       }
     },
     [],
@@ -170,7 +205,10 @@ export default function VayuShieldHome() {
 
   // Trigger fetch on mount or when city/language changes (habit adjustments are zero-latency pure client-side)
   useEffect(() => {
-    fetchIntelligence(activeCity, language);
+    void fetchIntelligence(activeCity, language);
+    return () => {
+      abortControllerRef.current?.abort();
+    };
   }, [activeCity, language, fetchIntelligence]);
 
   return (
@@ -267,7 +305,9 @@ export default function VayuShieldHome() {
             {/* Sync / Refresh Button */}
             <button
               type="button"
-              onClick={() => fetchIntelligence(activeCity, language)}
+              onClick={() => {
+                void fetchIntelligence(activeCity, language);
+              }}
               disabled={isLoading}
               className="p-2 rounded-xl text-neutral-400 hover:text-white bg-white/[0.03] border border-white/[0.08] hover:border-white/[0.14] disabled:opacity-50 transition-all focus:outline-none focus:ring-2 focus:ring-sky-400"
               aria-label={isLoading ? t.app.refreshing : t.app.refreshButton}
@@ -361,7 +401,7 @@ export default function VayuShieldHome() {
               <span className="text-[11px] font-mono px-3 py-0.5 rounded-full bg-white/[0.04] text-neutral-400 border border-white/[0.08] self-start sm:self-auto">
                 {advisor.isFallback
                   ? "Deterministic Verified Guidance"
-                  : "Gemini 2.5 Guarded Guidance"}
+                  : "Gemini 4 Guarded Guidance"}
               </span>
             </div>
 
@@ -373,7 +413,7 @@ export default function VayuShieldHome() {
             <div className="pt-1 flex flex-wrap gap-2 text-xs">
               {advisor.output.topActionIds.map((actionId, aIdx) => (
                 <span
-                  key={aIdx}
+                  key={`${actionId}-${aIdx}`}
                   className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/[0.03] border border-white/[0.08] text-neutral-200 font-mono text-xs shadow-sm"
                 >
                   <ShieldCheck className="h-3.5 w-3.5 text-sky-400" aria-hidden="true" />
@@ -398,64 +438,74 @@ export default function VayuShieldHome() {
 
         {/* 1. Dual-Scale Reality Check & Station Skew Banner */}
         {intelligence && (
-          <DualScaleCard
-            cpcb={intelligence.currentConditions.cpcb}
-            usEpa={intelligence.currentConditions.usEpa}
-            satisfactoryIllusionAlert={
-              intelligence.currentConditions.satisfactoryIllusionAlert
-            }
-            scaleExplanation={intelligence.currentConditions.scaleComparisonExplanation}
-            groundStation={intelligence.groundStation}
-            pm25Concentration={intelligence.currentConditions.pm25}
-            humidityPct={intelligence.diurnalAnalysis.observations48h[0]?.humidityPct}
-            wasHumidityAdjusted={
-              intelligence.diurnalAnalysis.cleanestToday?.wasHumidityAdjusted
-            }
-            language={language}
-          />
+          <ErrorBoundary fallbackTitle="Dual-Scale Card Recovery">
+            <DualScaleCard
+              cpcb={intelligence.currentConditions.cpcb}
+              usEpa={intelligence.currentConditions.usEpa}
+              satisfactoryIllusionAlert={
+                intelligence.currentConditions.satisfactoryIllusionAlert
+              }
+              scaleExplanation={intelligence.currentConditions.scaleComparisonExplanation}
+              groundStation={intelligence.groundStation}
+              pm25Concentration={intelligence.currentConditions.pm25}
+              humidityPct={intelligence.diurnalAnalysis.observations48h[0]?.humidityPct}
+              wasHumidityAdjusted={
+                intelligence.diurnalAnalysis.cleanestToday?.wasHumidityAdjusted
+              }
+              language={language}
+            />
+          </ErrorBoundary>
         )}
 
         {/* 2. 48-Hour Diurnal Clean-Air Window Optimizer */}
         {intelligence && (
-          <DiurnalPlanner
-            observations48h={intelligence.diurnalAnalysis.observations48h}
-            cleanestToday={intelligence.diurnalAnalysis.cleanestToday}
-            worstToday={intelligence.diurnalAnalysis.worstToday}
-            cleanestTomorrow={intelligence.diurnalAnalysis.cleanestTomorrow}
-            worstTomorrow={intelligence.diurnalAnalysis.worstTomorrow}
-            selectedArchetype={selectedArchetype}
-            onArchetypeChange={handleArchetypeChange}
-            language={language}
-          />
+          <ErrorBoundary fallbackTitle="Diurnal Planner Recovery">
+            <DiurnalPlanner
+              observations48h={intelligence.diurnalAnalysis.observations48h}
+              cleanestToday={intelligence.diurnalAnalysis.cleanestToday}
+              worstToday={intelligence.diurnalAnalysis.worstToday}
+              cleanestTomorrow={intelligence.diurnalAnalysis.cleanestTomorrow}
+              worstTomorrow={intelligence.diurnalAnalysis.worstTomorrow}
+              selectedArchetype={selectedArchetype}
+              onArchetypeChange={handleArchetypeChange}
+              language={language}
+            />
+          </ErrorBoundary>
         )}
 
         {/* 3. Indoor Shelter & Combustion Audit */}
         {intelligence && (
-          <IndoorShelterCard
-            outdoorPm25={intelligence.currentConditions.pm25}
-            initialRoomDimensions={roomDimensions}
-            onRoomDimensionsChange={handleRoomDimensionsChange}
-            language={language}
-          />
+          <ErrorBoundary fallbackTitle="Indoor Shelter Audit Recovery">
+            <IndoorShelterCard
+              outdoorPm25={intelligence.currentConditions.pm25}
+              initialRoomDimensions={roomDimensions}
+              onRoomDimensionsChange={handleRoomDimensionsChange}
+              language={language}
+            />
+          </ErrorBoundary>
         )}
 
         {/* 4. Upwind Satellite Smoke & Meteorology Card */}
         {intelligence && (
-          <UpwindContextCard
-            upwindContext={intelligence.upwindFireContext}
-            language={language}
-          />
+          <ErrorBoundary fallbackTitle="Upwind Context Recovery">
+            <UpwindContextCard
+              upwindContext={intelligence.upwindFireContext}
+              language={language}
+            />
+          </ErrorBoundary>
         )}
 
         {/* 5. Community & RWA Smog Action Hub */}
         {intelligence && (
-          <CommunityHub
-            cpcbAqi={intelligence.currentConditions.cpcb.aqi}
-            outdoorPm25={intelligence.currentConditions.pm25}
-            rwaNoticeHeadline={advisor?.output.rwaNoticeHeadline}
-            rwaNoticeBody={advisor?.output.rwaNoticeBody}
-            language={language}
-          />
+          <ErrorBoundary fallbackTitle="Community Hub Recovery">
+            <CommunityHub
+              cpcbAqi={intelligence.currentConditions.cpcb.aqi}
+              outdoorPm25={intelligence.currentConditions.pm25}
+              rwaNoticeHeadline={advisor?.output.rwaNoticeHeadline}
+              rwaNoticeBody={advisor?.output.rwaNoticeBody}
+              language={language}
+            />
+          </ErrorBoundary>
         )}
       </main>
 
