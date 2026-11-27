@@ -34,8 +34,14 @@ jobs:
       - name: Static Code Hygiene (ESLint)
         run: npm run lint
 
-      - name: Unit & Physics Kernel Coverage (Vitest)
+      - name: Code Formatting Check (Prettier)
+        run: npm run format:check
+
+      - name: Unit, Service & API Coverage (Vitest)
         run: npm run test:coverage
+
+      - name: Production Next.js Build Check
+        run: npm run build
 
       - name: High-Risk Dependency Security Audit
         run: npm audit --audit-level=high
@@ -73,7 +79,7 @@ jobs:
       - name: Build Next.js Production Bundle
         run: npm run build
 
-      - name: Execute Playwright E2E & Accessibility Suite
+      - name: Execute Playwright E2E & Accessibility Suite (Production Server)
         run: npx playwright test
 
       - name: Upload Playwright Test Report Artifact

@@ -30,9 +30,6 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=8080
 ENV HOSTNAME="0.0.0.0"
 
-# Install curl/wget for healthchecks if needed
-RUN apk add --no-cache wget
-
 # Create non-root system group and user
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nextjs
@@ -47,8 +44,8 @@ USER nextjs
 
 EXPOSE 8080
 
-# Production Healthcheck for Cloud Run & Orchestrators
+# Production Healthcheck for Cloud Run & Orchestrators (lightweight deep health endpoint)
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
-  CMD node -e "require('http').get('http://127.0.0.1:8080/', (res) => { if (res.statusCode < 400) process.exit(0); else process.exit(1); }).on('error', () => process.exit(1));"
+  CMD node -e "require('http').get('http://127.0.0.1:8080/api/health', (res) => { if (res.statusCode === 200) process.exit(0); else process.exit(1); }).on('error', () => process.exit(1));"
 
 CMD ["node", "server.js"]
