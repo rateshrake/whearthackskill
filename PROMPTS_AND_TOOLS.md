@@ -20,7 +20,7 @@ The table below catalogs every tool, framework, runtime API, and cloud service u
 | **E2E & Accessibility QA**    | Playwright & `@axe-core/playwright` | `1.65.1` / `4.14.0`          | Headless Chromium automation and automated WCAG 2.1 AA/AAA rule evaluation.                           |
 | **Static Code Hygiene**       | ESLint & Prettier                   | `9.20.1` / `3.5.1`           | Flat-config static linting (zero warnings) and code formatting.                                       |
 | **AI Coding Assistant**       | Google Antigravity (Gemini 2.5 Pro) | System Agent                 | Agentic coding environment executing multi-turn architectural decomposition, coding, and testing.     |
-| **Generative Decision Layer** | `@google/genai` SDK                 | `3.6.1` (`gemini-2.5-flash`) | Structured JSON generative advisor for contextual family briefings and RWA WhatsApp notices.          |
+| **Generative Decision Layer** | `@google/genai` SDK                 | `3.6.1` (`gemini-4-hydrogen`) | Structured JSON Interactions advisor for contextual family briefings and RWA notices.          |
 | **Environmental APIs**        | Google Maps Air Quality API         | `v1`                         | Primary current conditions and 48-hour continuous hourly forecasts.                                   |
 | **Environmental APIs**        | Open-Meteo Air Quality & Weather    | ECMWF CAMS (CC BY 4.0)       | Zero-credential fallback for air quality pollutants, wind speed/direction, and boundary layer height. |
 | **Environmental APIs**        | WAQI / AQICN & OpenAQ               | `v1` / `v3`                  | Ground station monitoring readings for micro-hotspot vs. regional skew detection.                     |
@@ -67,10 +67,10 @@ Every architectural and tooling decision in VayuShield was driven by concrete en
 - **Engineering Decision:** In [`src/services/geminiAdvisor.ts`](file:///e:/ai%20projects/h2skill/challenge%206/src/services/geminiAdvisor.ts), the prompt strictly instructs the model:
   > _"DO NOT generate any numbers, numeric values, percentages, or concentrations. All mathematical figures are strictly pre-calculated and will be inserted by the host system."_
 - **Defense-in-Depth Guardrail:**
-  1. _Structured JSON Schema:_ Constrains Gemini 2.5 Flash to predefined fields (`topActionIds`, `familyBriefing`, `rwaNoticeHeadline`, `rwaNoticeBody`).
-  2. _Adversarial Digit Rejection:_ A regex check (`/\d/`) inspects the returned text. If Gemini injects any numeric digit, the entire output is rejected as untrusted.
-  3. _3.5s Timeout Abort:_ Prevents slow LLM responses from degrading the API's SLA.
-  4. _Certified Deterministic Fallback:_ In the event of any rejection or timeout, the system instantly serves a hand-verified, bilingual deterministic advisory template from [`src/i18n/dictionary.ts`](file:///e:/ai%20projects/h2skill/challenge%206/src/i18n/dictionary.ts).
+  1. _Structured JSON Schema:_ Constrains `@google/genai` Interactions (`gemini-4-hydrogen`, `store: false`) to predefined fields (`topActionIds`, `familyBriefing`, `rwaNoticeHeadline`, `rwaNoticeBody`) with `system_instruction` separation.
+  2. _Adversarial Digit Rejection:_ A Unicode decimal regex check (`/\p{Nd}/u`) inspects the returned text. If Gemini injects any ASCII or Devanagari digit, the entire output is rejected as untrusted.
+  3. _3.5s Timeout Abort & Circuit Breaker:_ Prevents slow or failing LLM responses from degrading the API's SLA.
+  4. _Certified Deterministic Fallback:_ In the event of any rejection, circuit open, or timeout, the system instantly serves a hand-verified, bilingual deterministic advisory template.
 
 ### E. Google Cloud Run in `asia-south1` (Mumbai) & Secret Manager
 
