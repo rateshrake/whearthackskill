@@ -13,9 +13,10 @@ import type { AdvisorExecutionResult } from "../src/services/geminiAdvisor";
 /**
  * Fixture Factory for Deterministic Intelligence Payloads
  */
-function createDeterministicFixture(
-  scenario: "severe_delhi" | "satisfactory_illusion",
-): { intelligence: AirIntelligencePayload; advisor: AdvisorExecutionResult } {
+function createDeterministicFixture(scenario: "severe_delhi" | "satisfactory_illusion"): {
+  intelligence: AirIntelligencePayload;
+  advisor: AdvisorExecutionResult;
+} {
   if (scenario === "severe_delhi") {
     const pm25 = 240.0;
     const pm10 = 380.0;
@@ -244,6 +245,13 @@ test.describe("VayuShield E2E & Accessibility Hardening Suite", () => {
     page,
   }) => {
     let networkCallCount = 0;
+    const failedAssetResponses: string[] = [];
+
+    page.on("response", (res) => {
+      if (res.url().startsWith("http://localhost:3000") && res.status() >= 400) {
+        failedAssetResponses.push(`${res.status()} ${res.url()}`);
+      }
+    });
 
     // Intercept /api/intelligence with deterministic Severe Delhi payload
     await page.route("**/api/intelligence*", async (route) => {
@@ -266,16 +274,22 @@ test.describe("VayuShield E2E & Accessibility Hardening Suite", () => {
     expect(networkCallCount).toBe(1);
 
     // 2. Verify Module 1: DualScaleCard
-    const dualScaleSection = page.locator('section[aria-labelledby="dual-scale-heading"]');
+    const dualScaleSection = page.locator(
+      'section[aria-labelledby="dual-scale-heading"]',
+    );
     await expect(dualScaleSection).toBeVisible();
     await expect(dualScaleSection).toContainText("India CPCB National AQI");
     await expect(dualScaleSection).toContainText("US EPA May 2024 Revised AQI");
     await expect(dualScaleSection).toContainText("MICRO-HOTSPOT DETECTED");
 
     // 3. Verify Module 2: DiurnalPlanner & Zero-Latency Archetype Recalculation
-    const diurnalSection = page.locator('section[aria-labelledby="diurnal-planner-heading"]');
+    const diurnalSection = page.locator(
+      'section[aria-labelledby="diurnal-planner-heading"]',
+    );
     await expect(diurnalSection).toBeVisible();
-    await expect(diurnalSection).toContainText("48-Hour Diurnal Clean-Air Window Optimizer");
+    await expect(diurnalSection).toContainText(
+      "48-Hour Diurnal Clean-Air Window Optimizer",
+    );
     await expect(diurnalSection).toContainText("Pulmonary Inhaled Dose Comparison");
 
     // Click Archetype: Older Adult (Morning Walker)
@@ -288,9 +302,13 @@ test.describe("VayuShield E2E & Accessibility Hardening Suite", () => {
     await expect(diurnalSection).toContainText("Older Adult (Morning Walker)");
 
     // 4. Verify Module 3: IndoorShelterCard & Zero-Latency CADR / Combustion Spikes
-    const indoorSection = page.locator('section[aria-labelledby="indoor-shelter-heading"]');
+    const indoorSection = page.locator(
+      'section[aria-labelledby="indoor-shelter-heading"]',
+    );
     await expect(indoorSection).toBeVisible();
-    await expect(indoorSection).toContainText("Indoor Single-Zone Mass Balance Shelter Audit");
+    await expect(indoorSection).toContainText(
+      "Indoor Single-Zone Mass Balance Shelter Audit",
+    );
     await expect(indoorSection).toContainText("Required CADR (m³/h)");
 
     // Adjust Room Length Slider
@@ -307,20 +325,26 @@ test.describe("VayuShield E2E & Accessibility Hardening Suite", () => {
     expect(networkCallCount).toBe(1);
 
     // 5. Verify Module 4: UpwindContextCard
-    const upwindSection = page.locator('section[aria-labelledby="upwind-context-heading"]');
+    const upwindSection = page.locator(
+      'section[aria-labelledby="upwind-context-heading"]',
+    );
     await expect(upwindSection).toBeVisible();
     await expect(upwindSection).toContainText("68");
     await expect(upwindSection).toContainText("42.5 km");
     await expect(upwindSection).toContainText("Upwind Plume Aligned");
 
     // 6. Verify Module 5: CommunityHub & Clipboard Copy
-    const communitySection = page.locator('section[aria-labelledby="community-hub-heading"]');
+    const communitySection = page.locator(
+      'section[aria-labelledby="community-hub-heading"]',
+    );
     await expect(communitySection).toBeVisible();
     await expect(communitySection).toContainText("Community & Society Smog Action Hub");
     await expect(communitySection).toContainText("GRAP");
 
     // Click "Copy RWA / School WhatsApp Advisory"
-    const copyBtn = communitySection.locator('button:has-text("Copy RWA / School WhatsApp Advisory")');
+    const copyBtn = communitySection.locator(
+      'button:has-text("Copy RWA / School WhatsApp Advisory")',
+    );
     await copyBtn.click();
     await expect(communitySection).toContainText("Copied to Clipboard!");
 
@@ -330,7 +354,11 @@ test.describe("VayuShield E2E & Accessibility Hardening Suite", () => {
     await expect(footer).toContainText("Open-Meteo & CAMS");
     await expect(footer).toContainText("WAQI & CPCB");
 
-    // 8. Run Axe Accessibility Scan on Severe Delhi English State
+    // 8. Verify zero failed local asset responses (including /favicon.ico) and run Axe Accessibility Scan
+    const faviconRes = await page.request.get("/favicon.ico");
+    expect(faviconRes.status()).toBe(200);
+    expect(failedAssetResponses).toEqual([]);
+
     const axeResults = await new AxeBuilder({ page }).analyze();
     expect(axeResults.violations).toEqual([]);
   });
@@ -372,15 +400,15 @@ test.describe("VayuShield E2E & Accessibility Hardening Suite", () => {
 
     // 5. Assert Hindi Headlines & Typography
     await expect(page.locator("h1")).toContainText("वायुशील्ड");
-    await expect(page.locator('section[aria-labelledby="dual-scale-heading"] h2')).toContainText(
-      "द्वि-पैमाना वास्तविकता जांच",
-    );
-    await expect(page.locator('section[aria-labelledby="diurnal-planner-heading"] h2')).toContainText(
-      "48-घंटे स्वच्छ-हवा दैनिक समय अनुकूलक",
-    );
-    await expect(page.locator('section[aria-labelledby="indoor-shelter-heading"] h2')).toContainText(
-      "इनडोर शेल्टर एवं घरेलू दहन सुरक्षा ऑडिट",
-    );
+    await expect(
+      page.locator('section[aria-labelledby="dual-scale-heading"] h2'),
+    ).toContainText("द्वि-पैमाना वास्तविकता जांच");
+    await expect(
+      page.locator('section[aria-labelledby="diurnal-planner-heading"] h2'),
+    ).toContainText("48-घंटे स्वच्छ-हवा दैनिक समय अनुकूलक");
+    await expect(
+      page.locator('section[aria-labelledby="indoor-shelter-heading"] h2'),
+    ).toContainText("इनडोर शेल्टर एवं घरेलू दहन सुरक्षा ऑडिट");
 
     // 6. Run Axe Accessibility Scan on Hindi State
     const axeResultsHi = await new AxeBuilder({ page }).analyze();

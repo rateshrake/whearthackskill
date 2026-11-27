@@ -21,6 +21,9 @@ export const metadata: Metadata = {
   title: "VayuShield | Urban Air Quality & Clean-Air Navigator",
   description:
     "Production-grade bilingual (English/Hindi) air quality intelligence platform for Delhi-NCR and urban India. Features dual-scale reality checks, diurnal exposure optimization, indoor mass balance physics, and community action bulletins.",
+  icons: {
+    icon: "/favicon.ico",
+  },
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
