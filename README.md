@@ -111,7 +111,7 @@ npm run lint
 # Prettier format check
 npm run format:check
 
-# Run 131 Vitest unit and integration tests
+# Run 153 Vitest unit and integration tests
 npm run test
 
 # Run Vitest test coverage report with v8 across engine, services, and API routes
@@ -224,10 +224,10 @@ All automated checks are enforced locally and in the GitHub Actions pipeline ([`
  TypeScript Strictness                  0 Errors (strict: true)        PASS
  ESLint Static Hygiene                  0 Errors / 0 Warnings          PASS
  Prettier Formatting Check              All matched files clean        PASS
- Vitest Unit & Integration Suites       131 / 131 Tests Passing        PASS
- Vitest Statement Coverage              94.15% (engine+services+api)   PASS
- Vitest Branch Coverage                 82.21% (engine+services+api)   PASS
- Playwright E2E Scenarios (A & B)       2 / 2 Passing (9.5s, prod)     PASS
+ Vitest Unit & Integration Suites       153 / 153 Tests Passing        PASS
+ Vitest Statement Coverage              93.09% (full codebase)         PASS
+ Vitest Branch Coverage                 78.36% (full codebase)         PASS
+ Playwright E2E Scenarios (A, B & C)    3 / 3 Passing (prod)           PASS
  axe-core Accessibility Violations      0 Violations (WCAG AA/AAA)     PASS
  High/Critical Dependency Audit         0 Vulnerabilities              PASS
  Secret Leak Prevention Check           0 High-entropy Keys Detected   PASS

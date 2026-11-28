@@ -107,14 +107,70 @@ export function resetAllCircuitBreakers(): void {
   }
 }
 
+const SECRET_ENV_KEYS = [
+  "GOOGLE_MAPS_API_KEY",
+  "WAQI_TOKEN",
+  "OPENAQ_API_KEY",
+  "NASA_FIRMS_MAP_KEY",
+  "GEMINI_API_KEY",
+  "GOOGLE_API_KEY",
+  "HEALTHCHECK_TOKEN",
+] as const;
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 /**
- * Scrubs sensitive URL credentials, tokens, and Google API keys from strings before logging or throwing.
+ * Scrubs sensitive URL credentials, tokens, Authorization/API-key headers,
+ * and active server secrets from strings before logging or throwing.
  */
 export function redactSecrets(input: string): string {
-  return input
+  let sanitized = input
     .replace(/([?&](?:key|token|apiKey|api_key)=)[^&\s"']+/gi, "$1[REDACTED]")
     .replace(/(\/api\/area\/csv\/)[^/\s"']+\//gi, "$1[REDACTED]/")
-    .replace(/AIza[0-9A-Za-z\-_]{15,}/g, "[REDACTED_KEY]");
+    .replace(/AIza[0-9A-Za-z\-_]{15,}/g, "[REDACTED_KEY]")
+    .replace(/(Bearer\s+)[^\s"'}]+/gi, "$1[REDACTED]")
+    .replace(
+      /((?:x-goog-api-key|x-api-key)["']?[ \t]*[:=][ \t]*")((?:\\.|[^"\\])+)"/gi,
+      '$1[REDACTED]"',
+    )
+    .replace(
+      /((?:x-goog-api-key|x-api-key)["']?[ \t]*[:=][ \t]*')((?:\\.|[^'\\])+)'/gi,
+      "$1[REDACTED]'",
+    )
+    .replace(
+      /(authorization["']?[ \t]*[:=][ \t]*"(?:[A-Za-z][A-Za-z0-9_-]{1,30}[ \t]+)?)((?:\\.|[^"\\])+)"/gi,
+      '$1[REDACTED]"',
+    )
+    .replace(
+      /(authorization["']?[ \t]*[:=][ \t]*'(?:[A-Za-z][A-Za-z0-9_-]{1,30}[ \t]+)?)((?:\\.|[^'\\])+)'/gi,
+      "$1[REDACTED]'",
+    )
+    .replace(
+      /(authorization["']?[ \t]*[:=][ \t]*(?:Digest|AWS4-HMAC-SHA256|OAuth|Signature|HOBA|Mutual|Negotiate)[ \t]+)[^\r\n}]+?(?=(?:,[ \t]*[A-Za-z0-9_.-]+[ \t]*:|\r|\n|\}|$))/gi,
+      "$1[REDACTED]",
+    )
+    .replace(
+      /((?:x-goog-api-key|x-api-key)["']?[ \t]*[:=][ \t]*)[^\s"',;}]+/gi,
+      "$1[REDACTED]",
+    )
+    .replace(
+      /(authorization["']?[ \t]*[:=][ \t]*(?:[A-Za-z][A-Za-z0-9_-]{1,30}[ \t]+)?)[^\s"',;}]+/gi,
+      "$1[REDACTED]",
+    );
+
+  for (const envKey of SECRET_ENV_KEYS) {
+    const secretVal = process.env[envKey];
+    if (secretVal && secretVal.length >= 8) {
+      sanitized = sanitized.replace(
+        new RegExp(escapeRegExp(secretVal), "g"),
+        "[REDACTED_SECRET]",
+      );
+    }
+  }
+
+  return sanitized;
 }
 
 export class UpstreamCircuitOpenError extends Error {
@@ -164,7 +220,14 @@ async function readResponseTextBounded(
       if (value) {
         totalBytes += value.byteLength;
         if (totalBytes > maxBytes) {
-          await reader.cancel().catch(() => {});
+          await reader.cancel().catch((cancelErr: unknown) => {
+            console.warn(
+              `[resilientHttp:${provider}] Reader cancel failed after size limit:`,
+              redactSecrets(
+                cancelErr instanceof Error ? cancelErr.message : String(cancelErr),
+              ),
+            );
+          });
           throw new ResponseSizeLimitError(provider, maxBytes);
         }
         result += decoder.decode(value, { stream: true });
@@ -173,7 +236,12 @@ async function readResponseTextBounded(
     result += decoder.decode();
     return result;
   } catch (err: unknown) {
-    await reader.cancel().catch(() => {});
+    await reader.cancel().catch((cancelErr: unknown) => {
+      console.warn(
+        `[resilientHttp:${provider}] Reader cancel failed during stream error:`,
+        redactSecrets(cancelErr instanceof Error ? cancelErr.message : String(cancelErr)),
+      );
+    });
     throw err;
   }
 }

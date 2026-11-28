@@ -1,11 +1,15 @@
 "use client";
 
 import React from "react";
+import { DICTIONARY, type SupportedLanguage } from "@/i18n/dictionary";
 import { AlertTriangle } from "lucide-react";
 
 export interface ErrorBoundaryProps {
   children: React.ReactNode;
+  language?: SupportedLanguage;
   fallbackTitle?: string;
+  fallbackBody?: string;
+  retryLabel?: string;
 }
 
 interface ErrorBoundaryState {
@@ -35,28 +39,30 @@ export class ErrorBoundary extends React.Component<
 
   render(): React.ReactNode {
     if (this.state.hasError) {
+      const t = DICTIONARY[this.props.language ?? "en"].errorBoundary;
       return (
         <div
           role="alert"
           className="p-5 rounded-2xl bg-rose-950/40 border border-rose-500/50 text-rose-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
         >
           <div className="flex items-start gap-3">
-            <AlertTriangle className="h-5 w-5 text-rose-400 flex-shrink-0 mt-0.5" />
+            <AlertTriangle
+              className="h-5 w-5 text-rose-400 flex-shrink-0 mt-0.5"
+              aria-hidden="true"
+            />
             <div className="text-xs font-mono space-y-1">
               <strong className="block text-sm text-white">
-                {this.props.fallbackTitle ?? "Panel Render Recovery"}
+                {this.props.fallbackTitle ?? t.defaultTitle}
               </strong>
-              <span>
-                An unexpected calculation or display error occurred in this module.
-              </span>
+              <span>{this.props.fallbackBody ?? t.defaultBody}</span>
             </div>
           </div>
           <button
             type="button"
             onClick={() => this.setState({ hasError: false })}
-            className="px-4 py-2 rounded-xl bg-rose-800 hover:bg-rose-700 text-white text-xs font-mono font-bold self-start sm:self-auto"
+            className="px-4 py-2 rounded-xl bg-rose-800 hover:bg-rose-700 text-white text-xs font-mono font-bold self-start sm:self-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
           >
-            Retry Panel
+            {this.props.retryLabel ?? t.retryButton}
           </button>
         </div>
       );

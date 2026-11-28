@@ -27,7 +27,10 @@
 | Duplicated IP/rate-limit/Zod/error/headers boilerplate across 3 routes | `src/app/api/*/route.ts` | Extract Deep Module (`httpApiGuard.ts` + `schemas.ts`) | Done |
 | 723-line God module mixing transport, math, parsing, and orchestration | `src/services/airQualityAggregator.ts` | Decompose into `resilientHttp.ts` + `src/services/providers/*` | Done |
 | Duplicated WAQI/OpenAQ skew percentage & classification logic | `src/services/providers/groundStation.ts` | Extract Method (`classifyStationSkew`) | Done |
-| Array index keys on React lists | `src/app/page.tsx`, `src/components/CommunityHub.tsx` | Replace with stable IDs (`item.id`, `${actionId}-${aIdx}`) | Done |
+| Array index keys on React lists | `src/app/page.tsx`, `src/components/CommunityHub.tsx`, `src/components/DiurnalPlanner.tsx` | Replace with stable IDs (`item.id`, `${actionId}-${aIdx}`, `${obs.timestampIso}-${idx}`) | Done |
+| Silent `catch {}` blocks & circular provider imports | `src/app/page.tsx`, `src/hooks/useVayuShieldPreferences.ts`, `src/services/*` | Central `safeStorage`, redacted `console.warn` diagnostics, leaf `src/services/attributions.ts` | Done |
+| Inline `style={{}}` CSP exception & `X-Powered-By` header | `DualScaleCard.tsx`, `DiurnalPlanner.tsx`, `securityHeaders.ts`, `next.config.ts` | Native `<progress>`, SVG `<rect>`, `style-src 'self'`, `poweredByHeader: false` | Done |
+| Multi-pollutant CPCB vs `compareAqiScales` mismatch & alarmist alert banner | `aqiBreakpoints.ts`, `airQualityAggregator.ts`, `DualScaleCard.tsx` | Pass full multi-pollutant `cpcbAqiResult`; peaceful flat `<aside>` notice | Done |
 
 ## Sprout / Wrap Register
 - None active; extracted adapters and deep modules were folded cleanly behind barrel re-exports in `src/services/index.ts` and `src/services/airQualityAggregator.ts`.

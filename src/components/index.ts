@@ -3,6 +3,8 @@
  * Barrel Export
  */
 
+export * from "./DashboardHeader";
+export * from "./HealthBriefingCard";
 export * from "./DualScaleCard";
 export * from "./DiurnalPlanner";
 export * from "./IndoorShelterCard";

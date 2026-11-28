@@ -96,48 +96,48 @@ export const COLOR_BLIND_SAFE_TOKENS: Record<
   Good: {
     name: "tol-teal",
     hex: "#009E73",
-    bgClass: "bg-emerald-700",
-    textClass: "text-emerald-100",
+    bgClass: "bg-emerald-800",
+    textClass: "text-emerald-50",
     borderClass: "border-emerald-600",
     label: "Good",
   },
   Satisfactory: {
     name: "tol-sky",
     hex: "#56B4E9",
-    bgClass: "bg-sky-700",
-    textClass: "text-sky-100",
+    bgClass: "bg-sky-800",
+    textClass: "text-sky-50",
     borderClass: "border-sky-600",
     label: "Satisfactory",
   },
   Moderate: {
     name: "tol-amber",
     hex: "#E69F00",
-    bgClass: "bg-amber-600",
-    textClass: "text-amber-100",
-    borderClass: "border-amber-500",
+    bgClass: "bg-amber-800",
+    textClass: "text-amber-50",
+    borderClass: "border-amber-600",
     label: "Moderate",
   },
   "Unhealthy for Sensitive Groups": {
     name: "tol-vermilion",
     hex: "#D55E00",
-    bgClass: "bg-orange-700",
-    textClass: "text-orange-100",
+    bgClass: "bg-orange-800",
+    textClass: "text-orange-50",
     borderClass: "border-orange-600",
     label: "Unhealthy for Sensitive Groups",
   },
   Poor: {
     name: "tol-orange-burnt",
     hex: "#E66101",
-    bgClass: "bg-orange-800",
-    textClass: "text-orange-100",
+    bgClass: "bg-orange-900",
+    textClass: "text-orange-50",
     borderClass: "border-orange-700",
     label: "Poor",
   },
   Unhealthy: {
     name: "tol-magenta",
     hex: "#CC79A7",
-    bgClass: "bg-rose-700",
-    textClass: "text-rose-100",
+    bgClass: "bg-rose-800",
+    textClass: "text-rose-50",
     borderClass: "border-rose-600",
     label: "Unhealthy",
   },
@@ -145,32 +145,32 @@ export const COLOR_BLIND_SAFE_TOKENS: Record<
     name: "tol-dark-red",
     hex: "#B2182B",
     bgClass: "bg-red-800",
-    textClass: "text-red-100",
-    borderClass: "border-red-700",
+    textClass: "text-red-50",
+    borderClass: "border-red-600",
     label: "Very Poor",
   },
   "Very Unhealthy": {
     name: "tol-violet",
     hex: "#7828C8",
     bgClass: "bg-purple-800",
-    textClass: "text-purple-100",
-    borderClass: "border-purple-700",
+    textClass: "text-purple-50",
+    borderClass: "border-purple-600",
     label: "Very Unhealthy",
   },
   Severe: {
     name: "tol-burgundy",
     hex: "#67001F",
     bgClass: "bg-red-950",
-    textClass: "text-red-200",
-    borderClass: "border-red-800",
+    textClass: "text-red-100",
+    borderClass: "border-red-500",
     label: "Severe",
   },
   Hazardous: {
     name: "tol-deep-maroon",
     hex: "#7F0000",
     bgClass: "bg-rose-950",
-    textClass: "text-rose-200",
-    borderClass: "border-rose-900",
+    textClass: "text-rose-100",
+    borderClass: "border-rose-500",
     label: "Hazardous",
   },
 };
@@ -403,10 +403,9 @@ export function calculateCpcbAqi(concentrations: PollutantConcentrations): CpcbA
     Record<"PM2.5" | "PM10" | "NO2" | "O3" | "SO2" | "CO", CpcbSubIndexResult>
   > = {};
 
-  let maxSubIndex = 0;
+  let maxSubIndex = -1;
   let maxRawAqi = 0;
   let criticalPollutant: "PM2.5" | "PM10" | "NO2" | "O3" | "SO2" | "CO" = "PM2.5";
-  let hasValidPollutant = false;
   let hasCapped = false;
   let hasUncappedRawSeverity = false;
 
@@ -426,8 +425,7 @@ export function calculateCpcbAqi(concentrations: PollutantConcentrations): CpcbA
       const res = calculateCpcbSubIndex(key, val);
       subIndices[key] = res;
 
-      if (!hasValidPollutant || res.subIndex > maxSubIndex) {
-        hasValidPollutant = true;
+      if (res.subIndex > maxSubIndex) {
         maxSubIndex = res.subIndex;
         maxRawAqi = res.rawSubIndex;
         criticalPollutant = key;
@@ -437,10 +435,11 @@ export function calculateCpcbAqi(concentrations: PollutantConcentrations): CpcbA
     }
   }
 
-  const category = classifyCpcbAqi(maxSubIndex);
+  const resolvedAqi = maxSubIndex < 0 ? 0 : maxSubIndex;
+  const category = classifyCpcbAqi(resolvedAqi);
 
   return {
-    aqi: maxSubIndex,
+    aqi: resolvedAqi,
     rawAqi: maxRawAqi,
     category,
     isCapped: hasCapped,
@@ -475,12 +474,24 @@ export function calculateUsEpa2024Pm25Aqi(pm25: number): UsEpaAqiResult {
 }
 
 /**
- * Compares CPCB and US EPA 2024 scales for a given PM2.5 concentration.
- * Detects the "Satisfactory Illusion" where CPCB reports "Good" or "Satisfactory"
- * while US EPA classifies the air as "Unhealthy for Sensitive Groups" or worse.
+ * Compares India CPCB NAQI and US EPA 2024 PM2.5 scales consistently.
+ * Accepts either a scalar PM2.5 value (backward-compatible) or full multi-pollutant
+ * concentrations, plus an optional precomputed CPCB result so scale explanations always
+ * match the displayed overall India CPCB reading.
  */
-export function compareAqiScales(pm25: number): AqiScaleComparison {
-  const cpcbResult = calculateCpcbAqi({ pm25 });
+export function compareAqiScales(
+  input: number | PollutantConcentrations,
+  precomputedCpcb?: CpcbAqiResult,
+): AqiScaleComparison {
+  const concentrations: PollutantConcentrations =
+    typeof input === "number" ? { pm25: input } : input;
+  const rawPm25 = concentrations.pm25 ?? 0;
+  if (!Number.isFinite(rawPm25)) {
+    throw new RangeError("compareAqiScales: PM2.5 must be a finite number.");
+  }
+  const pm25 = Math.max(0, rawPm25);
+
+  const cpcbResult = precomputedCpcb ?? calculateCpcbAqi(concentrations);
   const epaResult = calculateUsEpa2024Pm25Aqi(pm25);
 
   const isCpcbMild =
@@ -493,20 +504,27 @@ export function compareAqiScales(pm25: number): AqiScaleComparison {
 
   const satisfactoryIllusionAlert = isCpcbMild && isEpaHarmful;
   const divergenceDelta = epaResult.aqi - cpcbResult.aqi;
+  const dominantNote =
+    cpcbResult.criticalPollutant !== "PM2.5"
+      ? ` (driven by ${cpcbResult.criticalPollutant})`
+      : "";
 
   let explanation: string;
   if (satisfactoryIllusionAlert) {
     explanation =
-      `CRITICAL ALERT: "Satisfactory Illusion" detected at ${pm25.toFixed(1)} µg/m³. ` +
-      `Indian CPCB rates this as "${cpcbResult.category}" (AQI ${cpcbResult.aqi}), but revised US EPA 2024 standards ` +
-      `classify it as "${epaResult.category}" (AQI ${epaResult.aqi}). Sensitive groups (asthmatic children, elders) ` +
-      `face active respiratory health risks despite local benign classification.`;
+      `At PM2.5 ${pm25.toFixed(1)} µg/m³, India CPCB rates overall air quality as "${cpcbResult.category}" (AQI ${cpcbResult.aqi}${dominantNote}), ` +
+      `while revised US EPA 2024 PM2.5 standards classify it as "${epaResult.category}" (AQI ${epaResult.aqi}). ` +
+      `Sensitive individuals (asthmatic children, older adults, and pregnant persons) may still benefit from gentler outdoor pacing and indoor filtration.`;
   } else if (divergenceDelta > 0) {
-    explanation = `US EPA index is ${divergenceDelta} points more conservative than CPCB due to stricter epidemiological thresholds.`;
+    explanation =
+      `At PM2.5 ${pm25.toFixed(1)} µg/m³, India CPCB rates overall air quality as "${cpcbResult.category}" (AQI ${cpcbResult.aqi}${dominantNote}), ` +
+      `while US EPA 2024 is ${divergenceDelta} points more conservative than CPCB at "${epaResult.category}" (AQI ${epaResult.aqi}) due to stricter fine-particle thresholds.`;
   } else if (divergenceDelta < 0) {
-    explanation = `CPCB index is ${Math.abs(divergenceDelta)} points higher in this severe tier due to steep linear sub-index slopes above 250 µg/m³.`;
+    explanation =
+      `CPCB index (${cpcbResult.aqi} ${cpcbResult.category}${dominantNote}) is ${Math.abs(divergenceDelta)} points higher than US EPA PM2.5 (${epaResult.aqi} ${epaResult.category}) ` +
+      `due to multi-pollutant sub-index weighting and steeper upper-tier slopes.`;
   } else {
-    explanation = `Both indices converge at this concentration level.`;
+    explanation = `Both indices converge at AQI ${cpcbResult.aqi} (${cpcbResult.category}).`;
   }
 
   return {

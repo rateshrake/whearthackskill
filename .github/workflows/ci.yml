@@ -43,8 +43,8 @@ jobs:
       - name: Production Next.js Build Check
         run: npm run build
 
-      - name: High-Risk Dependency Security Audit
-        run: npm audit --audit-level=high
+      - name: Dependency Security Audit (Moderate+)
+        run: npm audit --audit-level=moderate
 
       - name: Secret Leak Prevention Scan (Google API Keys)
         run: |

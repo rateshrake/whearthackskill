@@ -9,6 +9,7 @@ import {
   CommunityHub,
   AttributionFooter,
   ErrorBoundary,
+  HealthBriefingCard,
 } from "../index";
 import {
   calculateCpcbAqi,
@@ -81,29 +82,56 @@ describe("Frontend UI Components Integration & Accessibility", () => {
   };
 
   describe("DualScaleCard", () => {
-    it("renders dual scale comparison in English with satisfactory illusion alert", () => {
+    it("renders peaceful flat dual scale comparison in English with consistent AQI figures", () => {
       const html = renderToString(
         <DualScaleCard
           cpcb={dummyCpcb}
           usEpa={dummyUsEpa}
           satisfactoryIllusionAlert={true}
-          scaleExplanation="Discrepancy detected"
+          scaleExplanation="Scale Note"
           groundStation={dummyStation}
           pm25Concentration={48.0}
+          humidityPct={78}
+          wasHumidityAdjusted={true}
           language="en"
         />,
       );
 
       expect(html).toContain("Dual-Scale Reality Check");
-      expect(html).toContain("SATISFACTORY ILLUSION");
+      expect(html).toContain("Dual-Scale Reading Note");
+      expect(html).toContain("flat-surface");
+      expect(html).not.toContain("SATISFACTORY ILLUSION");
+      expect(html).not.toContain('role="alert"');
+      expect(html).not.toContain("style=");
+      expect(html).toContain("<progress");
       expect(html).toContain("India CPCB National AQI");
       expect(html).toContain("US EPA May 2024 Revised AQI");
       expect(html).toContain("MICRO-HOTSPOT DETECTED");
       expect(html).toContain('aria-labelledby="dual-scale-heading"');
     });
 
-    it("renders dual scale comparison in Hindi", () => {
-      const html = renderToString(
+    it("renders dual scale comparison consistently for Moderate PM10-dominated air (117 Moderate vs 139 USG) and in Hindi", () => {
+      const moderateCpcb = calculateCpcbAqi({ pm25: 51.1, pm10: 125.0 });
+      const epa139 = calculateUsEpa2024Pm25Aqi(51.1);
+
+      const enHtml = renderToString(
+        <DualScaleCard
+          cpcb={moderateCpcb}
+          usEpa={epa139}
+          satisfactoryIllusionAlert={false}
+          scaleExplanation="Consistent scale note"
+          groundStation={null}
+          pm25Concentration={51.1}
+          language="en"
+        />,
+      );
+      expect(enHtml).toContain("117");
+      expect(enHtml).toContain("Moderate");
+      expect(enHtml).toContain("139");
+      expect(enHtml).toContain("Unhealthy for Sensitive Groups");
+      expect(enHtml).toContain("driven by PM10");
+
+      const hiHtml = renderToString(
         <DualScaleCard
           cpcb={dummyCpcb}
           usEpa={dummyUsEpa}
@@ -115,9 +143,31 @@ describe("Frontend UI Components Integration & Accessibility", () => {
         />,
       );
 
-      expect(html).toContain("द्वि-पैमाना वास्तविकता जांच");
-      expect(html).toContain("संतोषजनक वायु का भ्रम");
-      expect(html).toContain("भारत CPCB राष्ट्रीय एक्यूआई");
+      expect(hiHtml).toContain("द्वि-पैमाना वास्तविकता जांच");
+      expect(hiHtml).toContain("द्वि-स्तरीय पैमाना नोट");
+      expect(hiHtml).toContain("भारत CPCB राष्ट्रीय एक्यूआई");
+      expect(hiHtml).toContain("संतोषजनक");
+      expect(hiHtml).toContain("संवेदनशील वर्गों के लिए अस्वास्थ्यकर");
+      expect(hiHtml).toContain("उप-सूचकांक");
+      expect(hiHtml).not.toContain("sub-index");
+      expect(hiHtml).not.toContain("Unhealthy for Sensitive Groups");
+
+      // Good air (<= 50 on both scales) renders tailored non-elevated note
+      const goodCpcb = calculateCpcbAqi({ pm25: 8.0 });
+      const goodEpa = calculateUsEpa2024Pm25Aqi(8.0);
+      const goodHtml = renderToString(
+        <DualScaleCard
+          cpcb={goodCpcb}
+          usEpa={goodEpa}
+          satisfactoryIllusionAlert={false}
+          scaleExplanation="Good air"
+          groundStation={null}
+          pm25Concentration={8.0}
+          language="en"
+        />,
+      );
+      expect(goodHtml).toContain("suitable for normal outdoor activities");
+      expect(goodHtml).not.toContain("Sensitive individuals");
     });
   });
 
@@ -240,6 +290,12 @@ describe("Frontend UI Components Integration & Accessibility", () => {
         />,
       );
       expect(noneHtml).toContain("No Direct Upwind Plume");
+
+      const hiUpwindHtml = renderToString(
+        <UpwindContextCard upwindContext={dummyUpwindContext} language="hi" />,
+      );
+      expect(hiUpwindHtml).toContain("तापीय विसंगतियों");
+      expect(hiUpwindHtml).not.toContain("Methodological disclaimer");
     });
   });
 
@@ -263,12 +319,16 @@ describe("Frontend UI Components Integration & Accessibility", () => {
 
     it("renders statutory mandates in Hindi", () => {
       const html = renderToString(
-        <CommunityHub cpcbAqi={425} outdoorPm25={260.0} language="hi" />,
+        <CommunityHub cpcbAqi={420} outdoorPm25={260.0} language="hi" />,
       );
 
       expect(html).toContain("सामुदायिक व आरडब्ल्यूए (RWA) ग्रैप एक्शन हब");
       expect(html).toContain("नागरिक स्वास्थ्य सुरक्षा चेकलिस्ट");
       expect(html).toContain("सोसायटी व आरडब्ल्यूए के लिए वैधानिक नियम");
+      expect(html).toContain("घर से काम (WFH)");
+      expect(html).toContain("नवीनीकरण, ड्रिलिंग");
+      expect(html).not.toContain("Work from home (WFH) if permitted");
+      expect(html).not.toContain("Halt all renovation, drilling");
     });
   });
 
@@ -290,6 +350,37 @@ describe("Frontend UI Components Integration & Accessibility", () => {
 
       expect(html).toContain("डेटा स्रोत व वैज्ञानिक आभार");
       expect(html).toContain("Medical Disclaimer");
+    });
+  });
+
+  describe("HealthBriefingCard", () => {
+    it("localizes known topActionIds in Hindi and falls back cleanly for custom IDs", () => {
+      const hiHtml = renderToString(
+        <HealthBriefingCard
+          advisor={{
+            output: {
+              topActionIds: [
+                "hepa_filtration_active",
+                "n95_respirator_mandatory",
+                "custom_community_check",
+              ],
+              familyBriefing: "सुरक्षा निर्देश सक्रिय हैं।",
+              rwaNoticeHeadline: "सूचना",
+              rwaNoticeBody: "नियमों का पालन करें।",
+            },
+            isFallback: true,
+            executionDurationMs: 10,
+          }}
+          selectedArchetype="child_asthma"
+          advisorArchetype="child_asthma"
+          language="hi"
+        />,
+      );
+
+      expect(hiHtml).toContain("HEPA एयर फिल्ट्रेशन सक्रिय रखें");
+      expect(hiHtml).toContain("N95 मास्क अनिवार्य");
+      expect(hiHtml).toContain("custom community check");
+      expect(hiHtml).not.toContain("hepa filtration active");
     });
   });
 

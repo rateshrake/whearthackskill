@@ -192,11 +192,12 @@ export function computeRollingDiurnalWindows(
   observations: readonly DiurnalObservation[],
   options: { applyHumidityCorrection?: boolean | undefined } = {},
 ): DiurnalOptimizationResult {
-  const validSorted = observations
-    .filter((obs) => Number.isFinite(Date.parse(obs.timestampIso)))
-    .toSorted((a, b) => Date.parse(a.timestampIso) - Date.parse(b.timestampIso));
+  const parsedValid = observations
+    .map((obs) => ({ obs, ms: Date.parse(obs.timestampIso) }))
+    .filter((entry) => Number.isFinite(entry.ms))
+    .sort((a, b) => a.ms - b.ms);
 
-  if (validSorted.length === 0) {
+  if (parsedValid.length === 0) {
     return {
       windows: [],
       cleanestToday: null,
@@ -208,7 +209,11 @@ export function computeRollingDiurnalWindows(
   }
 
   const applyCorrection = options.applyHumidityCorrection ?? true;
-  const processed = processDiurnalObservations(validSorted, applyCorrection);
+  const processed = processDiurnalObservations(
+    parsedValid.map((entry) => entry.obs),
+    applyCorrection,
+  );
+  const parsedMs = parsedValid.map((entry) => entry.ms);
 
   let humidityAdjustmentCount = 0;
   for (const obs of processed) {
@@ -217,18 +222,18 @@ export function computeRollingDiurnalWindows(
     }
   }
 
-  const baseTime = Date.parse(processed[0]!.timestampIso);
+  const baseTime = parsedMs[0]!;
   const dayMs = 24 * 60 * 60 * 1000;
   const windows: ExposureWindow[] = [];
 
   for (let i = 0; i < processed.length - 1; i++) {
     const current = processed[i]!;
-    const tCurrent = Date.parse(current.timestampIso);
+    const tCurrent = parsedMs[i]!;
     const windowPoints: ProcessedObservation[] = [];
 
     for (let j = i; j < processed.length; j++) {
       const pt = processed[j]!;
-      const ptTime = Date.parse(pt.timestampIso);
+      const ptTime = parsedMs[j]!;
       const diffHours = (ptTime - tCurrent) / (1000 * 60 * 60);
       if (diffHours <= 2.05) {
         windowPoints.push(pt);

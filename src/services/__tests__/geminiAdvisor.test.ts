@@ -7,6 +7,7 @@ import {
   type AdvisorMetricsInput,
 } from "../geminiAdvisor";
 import { resetAllCircuitBreakers } from "../resilientHttp";
+import { globalAdvisorCache } from "../gridCache";
 
 function createInteractionResponse(text: string): Response {
   return new Response(
@@ -50,6 +51,7 @@ describe("Service 4: geminiAdvisor & Guardrails", () => {
   beforeEach(() => {
     process.env = { ...originalEnv };
     resetAllCircuitBreakers();
+    globalAdvisorCache.clear();
   });
 
   afterEach(() => {
@@ -105,7 +107,7 @@ describe("Service 4: geminiAdvisor & Guardrails", () => {
       expect(fallbackHi.rwaNoticeHeadline).toContain("ग्रेप Stage III ('Severe')");
     });
 
-    it("should include Satisfactory Illusion warning in fallback when active", () => {
+    it("should include calm scale difference note in fallback when active", () => {
       const illusionInput: AdvisorMetricsInput = {
         ...mockInput,
         cpcbAqi: 75,
@@ -116,8 +118,9 @@ describe("Service 4: geminiAdvisor & Guardrails", () => {
       };
       const fallback = generateDeterministicFallback(illusionInput);
       expect(fallback.familyBriefing).toContain(
-        "ALERT: Local CPCB scale rates conditions benignly",
+        "Scale Note: Local CPCB scale rates conditions mildly",
       );
+      expect(fallback.familyBriefing).not.toContain("ALERT:");
     });
   });
 
@@ -315,6 +318,58 @@ describe("Service 4: geminiAdvisor & Guardrails", () => {
       const result = await generateAdvisorBriefing(mockInput);
       expect(result.isFallback).toBe(true);
       expect(result.fallbackReason).toBe("GEMINI_API_KEY_NOT_CONFIGURED");
+    });
+
+    it("should trip circuit breaker after repeated invalid JSON or schema rejections", async () => {
+      process.env.GEMINI_API_KEY = "mock_key";
+
+      for (let i = 0; i < 5; i++) {
+        const bad = await generateAdvisorBriefing(mockInput, {
+          interactionRunner: async () => ({ outputText: "{not-json" }),
+        });
+        expect(bad.fallbackReason).toBe("INVALID_JSON_RESPONSE");
+      }
+
+      const tripped = await generateAdvisorBriefing(mockInput, {
+        interactionRunner: async () => {
+          throw new Error("Should not execute when breaker is open");
+        },
+      });
+      expect(tripped.isFallback).toBe(true);
+      expect(tripped.fallbackReason).toBe("GEMINI_CIRCUIT_OPEN");
+    });
+
+    it("should cache non-fallback advisor responses via globalAdvisorCache and include diurnal cues", async () => {
+      process.env.GEMINI_API_KEY = "mock_cache_test_key";
+      let capturedBody = "";
+      const fetchMock = vi
+        .fn()
+        .mockImplementation(async (inputArg: RequestInfo | URL) => {
+          if (inputArg instanceof Request) {
+            capturedBody = await inputArg.clone().text();
+          }
+          return createInteractionResponse(
+            JSON.stringify({
+              topActionIds: ["hepa_purifier_active"],
+              familyBriefing:
+                "Shift outdoor exertion to the cleanest afternoon mixing window and run indoor filtration continuously.",
+              rwaNoticeHeadline: "RWA Clean Air Advisory",
+              rwaNoticeBody:
+                "Please minimize outdoor combustion and keep indoor clean-air spaces active.",
+            }),
+          );
+        });
+      globalThis.fetch = fetchMock;
+
+      const first = await generateAdvisorBriefing(mockInput);
+      expect(first.isFallback).toBe(false);
+      expect(capturedBody).toContain("afternoon solar mixing");
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+
+      const second = await generateAdvisorBriefing(mockInput);
+      expect(second.isFallback).toBe(false);
+      expect(second.output.familyBriefing).toBe(first.output.familyBriefing);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
     });
   });
 });

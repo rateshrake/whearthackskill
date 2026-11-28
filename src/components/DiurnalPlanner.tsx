@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   calculateRespiratoryDose,
   HOUSEHOLD_ARCHETYPES,
@@ -33,7 +33,14 @@ export function DiurnalPlanner({
   language,
 }: DiurnalPlannerProps) {
   const t = DICTIONARY[language].diurnal;
+  const locale = language === "hi" ? "hi-IN" : "en-IN";
   const [selectedObsIndex, setSelectedObsIndex] = useState<number | null>(null);
+  const barButtonRefs = useRef<Array<HTMLButtonElement | null>>([]);
+
+  // Reset selected hour readout when city / observation series updates
+  useEffect(() => {
+    setSelectedObsIndex(null);
+  }, [observations48h]);
 
   // Compute live respiratory dose comparing worst vs cleanest window for today
   const doseComparison =
@@ -41,18 +48,20 @@ export function DiurnalPlanner({
       ? calculateRespiratoryDose(worstToday, cleanestToday, selectedArchetype, 120)
       : null;
 
-  // Maximum PM2.5 for timeline scaling
-  const maxPm25 = Math.max(
-    ...observations48h.map((o) => o.pm25),
-    worstToday?.averagePm25 ?? 100,
-    100,
-  );
+  // Maximum PM2.5 for timeline scaling (filter non-finite values safely)
+  const finitePmValues = observations48h
+    .map((o) => o.pm25)
+    .filter((v) => Number.isFinite(v) && v >= 0);
+  const safeWorstAvg =
+    worstToday && Number.isFinite(worstToday.averagePm25) ? worstToday.averagePm25 : 100;
+  const maxPm25 = Math.max(...finitePmValues, safeWorstAvg, 100);
 
   const formatWindowTime = (isoString?: string) => {
     if (!isoString) return "--:--";
     try {
       const date = new Date(isoString);
-      return date.toLocaleTimeString([], {
+      if (Number.isNaN(date.getTime())) return isoString.slice(11, 16);
+      return date.toLocaleTimeString(locale, {
         hour: "2-digit",
         minute: "2-digit",
         hour12: false,
@@ -70,21 +79,53 @@ export function DiurnalPlanner({
     return time >= start && time <= end;
   };
 
+  const firstTimestampMs = observations48h[0]
+    ? Date.parse(observations48h[0].timestampIso)
+    : Number.NaN;
+
+  const handleBarKeyDown = (
+    event: React.KeyboardEvent<HTMLButtonElement>,
+    idx: number,
+  ) => {
+    const total = observations48h.length;
+    if (total === 0) return;
+
+    let nextIdx: number | null = null;
+    if (event.key === "ArrowRight") {
+      nextIdx = (idx + 1) % total;
+    } else if (event.key === "ArrowLeft") {
+      nextIdx = (idx - 1 + total) % total;
+    } else if (event.key === "Home") {
+      nextIdx = 0;
+    } else if (event.key === "End") {
+      nextIdx = total - 1;
+    }
+
+    if (nextIdx !== null) {
+      event.preventDefault();
+      setSelectedObsIndex(nextIdx);
+      barButtonRefs.current[nextIdx]?.focus();
+    }
+  };
+
+  const selectedObs =
+    selectedObsIndex !== null ? observations48h[selectedObsIndex] : undefined;
+
   return (
     <section
       aria-labelledby="diurnal-planner-heading"
-      className="rounded-2xl border border-white/[0.08] bg-[#0d1017] p-6 md:p-8 shadow-2xl relative overflow-hidden space-y-6"
+      className="rounded-2xl border border-white/15 bg-[#0d1017] p-6 md:p-8 shadow-2xl relative overflow-hidden space-y-6"
     >
       {/* Subtle top edge specular highlight */}
       <div className="absolute inset-x-0 top-0 h-[1px] bg-gradient-to-r from-transparent via-white/20 to-transparent" />
 
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-white/[0.06] pb-5">
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-white/[0.08] pb-5">
         <div>
           <div className="flex items-center gap-2 mb-1.5">
-            <span className="flex h-2 w-2 rounded-full bg-sky-400" />
+            <span className="flex h-2 w-2 rounded-full bg-sky-400" aria-hidden="true" />
             <span className="text-[11px] font-mono uppercase tracking-widest text-neutral-400 font-semibold">
-              Planetary Boundary Layer Dynamics
+              {t.eyebrow}
             </span>
           </div>
           <h2
@@ -99,16 +140,16 @@ export function DiurnalPlanner({
           </p>
         </div>
 
-        <div className="flex items-center gap-2 text-xs font-mono text-neutral-300 bg-white/[0.03] border border-white/[0.08] px-3.5 py-1.5 rounded-xl self-start md:self-auto">
+        <div className="flex items-center gap-2 text-xs font-mono text-neutral-300 bg-white/[0.03] border border-white/20 px-3.5 py-1.5 rounded-xl self-start md:self-auto">
           <Sun className="h-4 w-4 text-amber-400" aria-hidden="true" />
-          <span>Convective Mixing Peak: 13:00–16:00</span>
+          <span>{t.convectiveMixingBadge}</span>
         </div>
       </div>
 
       {/* Diurnal Extremes Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Cleanest Today */}
-        <div className="p-4 rounded-xl bg-emerald-950/20 border border-emerald-500/30 space-y-1.5">
+        <div className="p-4 rounded-xl bg-emerald-950/20 border border-emerald-500/35 space-y-1.5">
           <div className="flex items-center justify-between text-xs text-emerald-400 font-mono font-bold uppercase tracking-wider">
             <span>{t.cleanestToday}</span>
             <ShieldCheck className="h-4 w-4" aria-hidden="true" />
@@ -119,12 +160,14 @@ export function DiurnalPlanner({
               : "N/A"}
           </div>
           <div className="text-xs text-emerald-300 font-mono">
-            {cleanestToday ? `${cleanestToday.averagePm25.toFixed(1)} µg/m³ avg` : "--"}
+            {cleanestToday
+              ? `${cleanestToday.averagePm25.toFixed(1)} ${t.avgUnit}`
+              : "--"}
           </div>
         </div>
 
         {/* Worst Peak Today */}
-        <div className="p-4 rounded-xl bg-rose-950/20 border border-rose-500/30 space-y-1.5">
+        <div className="p-4 rounded-xl bg-rose-950/20 border border-rose-500/35 space-y-1.5">
           <div className="flex items-center justify-between text-xs text-rose-400 font-mono font-bold uppercase tracking-wider">
             <span>{t.worstToday}</span>
             <AlertCircle className="h-4 w-4" aria-hidden="true" />
@@ -135,41 +178,43 @@ export function DiurnalPlanner({
               : "N/A"}
           </div>
           <div className="text-xs text-rose-300 font-mono">
-            {worstToday ? `${worstToday.averagePm25.toFixed(1)} µg/m³ peak` : "--"}
+            {worstToday ? `${worstToday.averagePm25.toFixed(1)} ${t.peakUnit}` : "--"}
           </div>
         </div>
 
         {/* Cleanest Tomorrow */}
-        <div className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.06] space-y-1.5">
-          <div className="flex items-center justify-between text-xs text-neutral-400 font-mono font-bold uppercase tracking-wider">
+        <div className="p-4 rounded-xl bg-white/[0.02] border border-white/15 space-y-1.5">
+          <div className="flex items-center justify-between text-xs text-neutral-300 font-mono font-bold uppercase tracking-wider">
             <span>{t.cleanestTomorrow}</span>
             <Sun className="h-4 w-4 text-sky-400" aria-hidden="true" />
           </div>
-          <div className="text-xl font-mono font-semibold text-neutral-200">
+          <div className="text-xl font-mono font-semibold text-neutral-100">
             {cleanestTomorrow
               ? `${formatWindowTime(cleanestTomorrow.startTimeIso)} – ${formatWindowTime(cleanestTomorrow.endTimeIso)}`
               : "N/A"}
           </div>
           <div className="text-xs text-neutral-400 font-mono">
             {cleanestTomorrow
-              ? `${cleanestTomorrow.averagePm25.toFixed(1)} µg/m³ avg`
+              ? `${cleanestTomorrow.averagePm25.toFixed(1)} ${t.avgUnit}`
               : "--"}
           </div>
         </div>
 
         {/* Worst Peak Tomorrow */}
-        <div className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.06] space-y-1.5">
-          <div className="flex items-center justify-between text-xs text-neutral-400 font-mono font-bold uppercase tracking-wider">
+        <div className="p-4 rounded-xl bg-white/[0.02] border border-white/15 space-y-1.5">
+          <div className="flex items-center justify-between text-xs text-neutral-300 font-mono font-bold uppercase tracking-wider">
             <span>{t.worstTomorrow}</span>
             <Moon className="h-4 w-4 text-purple-400" aria-hidden="true" />
           </div>
-          <div className="text-xl font-mono font-semibold text-neutral-200">
+          <div className="text-xl font-mono font-semibold text-neutral-100">
             {worstTomorrow
               ? `${formatWindowTime(worstTomorrow.startTimeIso)} – ${formatWindowTime(worstTomorrow.endTimeIso)}`
               : "N/A"}
           </div>
           <div className="text-xs text-neutral-400 font-mono">
-            {worstTomorrow ? `${worstTomorrow.averagePm25.toFixed(1)} µg/m³ peak` : "--"}
+            {worstTomorrow
+              ? `${worstTomorrow.averagePm25.toFixed(1)} ${t.peakUnit}`
+              : "--"}
           </div>
         </div>
       </div>
@@ -178,55 +223,99 @@ export function DiurnalPlanner({
       <div className="space-y-3 pt-2">
         <div className="flex items-center justify-between">
           <h3 className="text-xs font-mono uppercase tracking-wider text-neutral-400 font-semibold">
-            48-Hour Hourly Particulate Timeline
+            {t.timelineTitle}
           </h3>
           <span className="text-[11px] font-mono text-neutral-400">
-            Interactive Continuous Scrubber
+            {t.timelineSubtitle}
           </span>
         </div>
 
-        <div className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.06] space-y-3 overflow-x-auto">
-          {/* Bar Chart Visualization */}
-          <div className="min-w-[700px] h-32 flex items-end gap-1.5 pt-4">
+        <div className="p-4 rounded-xl bg-white/[0.02] border border-white/15 space-y-3 overflow-x-auto">
+          {/* Bar Chart Visualization (SVG rects: zero inline styles, >= 24px target width, >= 3:1 contrast) */}
+          <div
+            role="group"
+            aria-label={t.interactiveTimelineAria}
+            className="min-w-[1280px] h-32 flex items-end gap-1 pt-4"
+          >
             {observations48h.map((obs, idx) => {
-              const heightPct = Math.min(100, Math.max(10, (obs.pm25 / maxPm25) * 100));
+              const safePm = Number.isFinite(obs.pm25) ? Math.max(0, obs.pm25) : 0;
+              const heightPct = Math.min(100, Math.max(12, (safePm / maxPm25) * 100));
               const isClean = isWithinWindow(obs.timestampIso, cleanestToday);
               const isWorst = isWithinWindow(obs.timestampIso, worstToday);
               const isSelected = selectedObsIndex === idx;
 
-              let barColor = "bg-neutral-700 hover:bg-neutral-600";
-              if (isClean) barColor = "bg-emerald-500 hover:bg-emerald-400";
-              else if (isWorst) barColor = "bg-rose-500 hover:bg-rose-400";
-              else if (obs.pm25 > 250) barColor = "bg-rose-600/80 hover:bg-rose-500";
-              else if (obs.pm25 > 120) barColor = "bg-amber-500/80 hover:bg-amber-400";
+              let barTextClass = "text-neutral-500 hover:text-neutral-300";
+              if (isClean) barTextClass = "text-emerald-400 hover:text-emerald-300";
+              else if (isWorst) barTextClass = "text-rose-400 hover:text-rose-300";
+              else if (safePm > 250) barTextClass = "text-rose-500 hover:text-rose-400";
+              else if (safePm > 120) barTextClass = "text-amber-400 hover:text-amber-300";
 
-              const hour = new Date(obs.timestampIso).getHours();
+              const obsMs = Date.parse(obs.timestampIso);
+              const dayLabel =
+                Number.isFinite(firstTimestampMs) &&
+                Number.isFinite(obsMs) &&
+                obsMs - firstTimestampMs >= 24 * 60 * 60 * 1000
+                  ? t.tomorrowLabel
+                  : t.todayLabel;
+              const formattedTime = formatWindowTime(obs.timestampIso);
+              const statusLabel = isClean
+                ? t.recommendedWindowTag
+                : isWorst
+                  ? t.avoidWindowTag
+                  : t.neutralWindowTag;
+
+              const ariaLabel = t.hourBarAria
+                .replace("{day}", dayLabel)
+                .replace("{time}", formattedTime)
+                .replace("{pm25}", safePm.toFixed(0))
+                .replace("{cleanStatus}", statusLabel);
 
               return (
                 <button
-                  key={idx}
+                  key={`${obs.timestampIso}-${idx}`}
+                  ref={(el) => {
+                    barButtonRefs.current[idx] = el;
+                  }}
                   type="button"
+                  aria-pressed={isSelected}
                   onClick={() => setSelectedObsIndex(idx)}
-                  className="flex-1 flex flex-col items-center justify-end h-full group focus:outline-none"
-                  aria-label={`Hour ${hour}:00, PM2.5 ${obs.pm25.toFixed(0)} µg/m³`}
+                  onKeyDown={(e) => handleBarKeyDown(e, idx)}
+                  className={`min-w-[24px] flex-1 flex flex-col items-center justify-end h-full rounded transition-transform motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 ${barTextClass} ${
+                    isSelected
+                      ? "ring-2 ring-white scale-105 motion-reduce:scale-100"
+                      : ""
+                  }`}
+                  aria-label={ariaLabel}
                 >
-                  <div
-                    className={`w-full rounded-t transition-all ${barColor} ${
-                      isSelected ? "ring-2 ring-white scale-105" : ""
-                    }`}
-                    style={{ height: `${heightPct}%` }}
-                  />
+                  <svg
+                    className="w-full h-full overflow-visible"
+                    viewBox="0 0 24 100"
+                    preserveAspectRatio="none"
+                    aria-hidden="true"
+                  >
+                    <rect
+                      x="2"
+                      y={100 - heightPct}
+                      width="20"
+                      height={heightPct}
+                      rx="2"
+                      className="fill-current"
+                    />
+                  </svg>
                 </button>
               );
             })}
           </div>
 
           {/* Hour Ticks Row (Outside Buttons) */}
-          <div className="min-w-[700px] flex gap-1.5 text-[9px] font-mono text-neutral-400 select-none pt-1 border-t border-white/[0.04]">
+          <div className="min-w-[1280px] flex gap-1 text-[9px] font-mono text-neutral-400 select-none pt-1 border-t border-white/[0.08]">
             {observations48h.map((obs, idx) => {
               const hour = new Date(obs.timestampIso).getHours();
               return (
-                <div key={idx} className="flex-1 text-center">
+                <div
+                  key={`tick-${obs.timestampIso}-${idx}`}
+                  className="min-w-[24px] flex-1 text-center"
+                >
                   {hour % 6 === 0 ? `${hour}h` : ""}
                 </div>
               );
@@ -234,40 +323,54 @@ export function DiurnalPlanner({
           </div>
 
           {/* Active Hover / Selected Telemetry Readout */}
-          {selectedObsIndex !== null && observations48h[selectedObsIndex] && (
-            <div className="p-3 rounded-lg bg-white/[0.04] border border-white/[0.08] flex items-center justify-between text-xs font-mono">
+          {selectedObs && (
+            <div
+              role="status"
+              aria-live="polite"
+              className="p-3 rounded-lg bg-white/[0.04] border border-white/20 flex flex-wrap items-center justify-between gap-3 text-xs font-mono"
+            >
               <span className="text-neutral-300">
-                Time:{" "}
+                {t.timeLabel}{" "}
                 <strong>
-                  {new Date(
-                    observations48h[selectedObsIndex]!.timestampIso,
-                  ).toLocaleString()}
+                  {new Date(selectedObs.timestampIso).toLocaleString(locale)}
                 </strong>
               </span>
               <span className="text-white">
-                PM2.5:{" "}
+                {t.pm25Label}{" "}
                 <strong>
-                  {observations48h[selectedObsIndex]!.pm25.toFixed(1)} µg/m³
+                  {(Number.isFinite(selectedObs.pm25) ? selectedObs.pm25 : 0).toFixed(1)}{" "}
+                  µg/m³
                 </strong>
               </span>
               <span className="text-neutral-300">
-                Humidity:{" "}
+                {t.humidityLabel}{" "}
                 <strong>
-                  {observations48h[selectedObsIndex]!.humidityPct?.toFixed(0) ?? "--"}%
+                  {selectedObs.humidityPct !== undefined &&
+                  Number.isFinite(selectedObs.humidityPct)
+                    ? selectedObs.humidityPct.toFixed(0)
+                    : "--"}
+                  %
                 </strong>
               </span>
             </div>
           )}
         </div>
+        <p className="text-xs text-neutral-400 leading-relaxed">
+          {t.nocturnalInversionNote}
+        </p>
       </div>
 
       {/* Household Archetype Selector & Respiratory Dose Comparison */}
-      <div className="space-y-4 border-t border-white/[0.06] pt-6">
+      <div className="space-y-4 border-t border-white/[0.08] pt-6">
         <div>
           <h3 className="text-xs font-mono uppercase tracking-wider text-neutral-400 font-semibold mb-2">
             {t.archetypeSelectorLabel}
           </h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
+          <div
+            role="group"
+            aria-label={t.archetypeSelectorLabel}
+            className="grid grid-cols-2 md:grid-cols-4 gap-2.5"
+          >
             {(Object.keys(HOUSEHOLD_ARCHETYPES) as HouseholdArchetype[]).map(
               (archKey) => {
                 const arch = HOUSEHOLD_ARCHETYPES[archKey];
@@ -279,15 +382,17 @@ export function DiurnalPlanner({
                     type="button"
                     aria-pressed={isSelected}
                     onClick={() => onArchetypeChange(archKey)}
-                    className={`p-3 rounded-xl text-left border transition-all ${
+                    className={`p-3 rounded-xl text-left border transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 ${
                       isSelected
-                        ? "bg-white/[0.08] border-sky-400 text-white shadow-md"
-                        : "bg-white/[0.02] border-white/[0.06] text-neutral-400 hover:text-white hover:bg-white/[0.04]"
+                        ? "bg-white/[0.1] border-sky-400 text-white shadow-md"
+                        : "bg-white/[0.02] border-white/40 text-neutral-300 hover:text-white hover:bg-white/[0.06]"
                     }`}
                   >
-                    <div className="font-semibold text-xs text-white">{arch.label}</div>
+                    <div className="font-semibold text-xs text-white">
+                      {t.archetypeLabels[archKey]}
+                    </div>
                     <div className="text-[10px] font-mono text-neutral-400 mt-0.5">
-                      {arch.minuteVentilationLpm} L/min ventilation
+                      {arch.minuteVentilationLpm} {t.ventilationUnit}
                     </div>
                   </button>
                 );
@@ -302,44 +407,40 @@ export function DiurnalPlanner({
             role="region"
             aria-live="polite"
             aria-label={t.doseComparisonTitle}
-            className="p-5 rounded-xl bg-white/[0.02] border border-white/[0.08] space-y-4"
+            className="p-5 rounded-xl bg-white/[0.02] border border-white/15 space-y-4"
           >
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-white/[0.06] pb-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-white/[0.08] pb-3">
               <div className="flex items-center gap-2">
                 <TrendingDown className="h-4 w-4 text-emerald-400" aria-hidden="true" />
                 <h4 className="font-bold text-sm text-white">{t.doseComparisonTitle}</h4>
               </div>
-              <span className="text-xs font-mono text-neutral-400">
-                {HOUSEHOLD_ARCHETYPES[selectedArchetype].label}
+              <span className="text-xs font-mono text-neutral-300">
+                {t.archetypeLabels[selectedArchetype]}
               </span>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 font-mono">
-              <div className="p-3 rounded-lg bg-rose-950/20 border border-rose-500/20">
+              <div className="p-3 rounded-lg bg-rose-950/20 border border-rose-500/30">
                 <span className="text-[10px] uppercase text-rose-300 block">
                   {t.baselineDoseLabel}
                 </span>
                 <div className="text-xl font-bold text-white mt-1">
                   {doseComparison.baselineDoseUg.toFixed(1)} µg
                 </div>
-                <span className="text-[10px] text-neutral-400">
-                  2-hour morning exposure
-                </span>
+                <span className="text-[10px] text-neutral-400">{t.baselineSubLabel}</span>
               </div>
 
-              <div className="p-3 rounded-lg bg-emerald-950/20 border border-emerald-500/20">
+              <div className="p-3 rounded-lg bg-emerald-950/20 border border-emerald-500/30">
                 <span className="text-[10px] uppercase text-emerald-300 block">
                   {t.shiftedDoseLabel}
                 </span>
                 <div className="text-xl font-bold text-white mt-1">
                   {doseComparison.shiftedDoseUg.toFixed(1)} µg
                 </div>
-                <span className="text-[10px] text-neutral-400">
-                  2-hour afternoon window
-                </span>
+                <span className="text-[10px] text-neutral-400">{t.shiftedSubLabel}</span>
               </div>
 
-              <div className="p-3 rounded-lg bg-sky-950/20 border border-sky-500/20">
+              <div className="p-3 rounded-lg bg-sky-950/20 border border-sky-500/30">
                 <span className="text-[10px] uppercase text-sky-300 block">
                   {t.netSparedLabel}
                 </span>
@@ -347,7 +448,7 @@ export function DiurnalPlanner({
                   -{doseComparison.percentReduction.toFixed(1)}%
                 </div>
                 <span className="text-[10px] text-neutral-400">
-                  {doseComparison.reductionUg.toFixed(1)} µg toxic particulate spared
+                  {doseComparison.reductionUg.toFixed(1)} {t.sparedSubLabel}
                 </span>
               </div>
             </div>

@@ -10,6 +10,11 @@
  *    - FORECAST_TTL_MS: 60 minutes (48-hr forecasts and NASA FIRMS fire anomalies)
  */
 
+import type { RawStationReading } from "./providers/groundStation";
+import type { AirIntelligencePayload } from "./airQualityAggregator";
+import type { UpwindFireQueryResult } from "./providers/upwindFire";
+import type { AdvisorExecutionResult } from "./geminiAdvisor";
+
 export const CACHE_TTL_MS = {
   STATION: 30 * 60 * 1000, // 30 minutes
   FORECAST: 60 * 60 * 1000, // 60 minutes
@@ -213,6 +218,7 @@ export class GridCache<T> {
 }
 
 // Global service singletons for Cloud Run instance lifecycle
-export const globalStationCache = new GridCache<unknown>(1000);
-export const globalForecastCache = new GridCache<unknown>(500);
-export const globalFirmsCache = new GridCache<unknown>(500);
+export const globalStationCache = new GridCache<RawStationReading>(1000);
+export const globalForecastCache = new GridCache<AirIntelligencePayload>(500);
+export const globalFirmsCache = new GridCache<UpwindFireQueryResult>(500);
+export const globalAdvisorCache = new GridCache<AdvisorExecutionResult>(500);

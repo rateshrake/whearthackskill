@@ -251,15 +251,16 @@ describe("Module 1: aqiBreakpoints", () => {
     });
   });
 
-  describe("compareAqiScales & Satisfactory Illusion Alert", () => {
+  describe("compareAqiScales & Calm Dual-Scale Comparison", () => {
     it("should trigger satisfactoryIllusionAlert when CPCB is Satisfactory while US EPA is USG (35.5 - 55.4 µg/m³)", () => {
       const comparison36 = compareAqiScales(36.0);
       expect(comparison36.cpcb.category).toBe("Satisfactory");
       expect(comparison36.usEpa.category).toBe("Unhealthy for Sensitive Groups");
       expect(comparison36.satisfactoryIllusionAlert).toBe(true);
       expect(comparison36.explanation).toContain(
-        'CRITICAL ALERT: "Satisfactory Illusion"',
+        'India CPCB rates overall air quality as "Satisfactory"',
       );
+      expect(comparison36.explanation).not.toContain("CRITICAL ALERT");
 
       const comparison50 = compareAqiScales(50.0);
       expect(comparison50.cpcb.category).toBe("Satisfactory");
@@ -272,7 +273,27 @@ describe("Module 1: aqiBreakpoints", () => {
       expect(comparison58.cpcb.category).toBe("Satisfactory");
       expect(comparison58.usEpa.category).toBe("Unhealthy");
       expect(comparison58.satisfactoryIllusionAlert).toBe(true);
-      expect(comparison58.explanation).toContain("CRITICAL ALERT");
+      expect(comparison58.explanation).toContain('classify it as "Unhealthy"');
+    });
+
+    it("should keep CPCB AQI & category consistent when another pollutant like PM10 dominates (117 Moderate vs 139 USG)", () => {
+      const concentrations = { pm25: 51.1, pm10: 125.0, no2: 30.0 };
+      const cpcbOverall = calculateCpcbAqi(concentrations);
+      expect(cpcbOverall.aqi).toBe(117);
+      expect(cpcbOverall.category).toBe("Moderate");
+      expect(cpcbOverall.criticalPollutant).toBe("PM10");
+
+      const comparison = compareAqiScales(concentrations, cpcbOverall);
+      expect(comparison.cpcb.aqi).toBe(117);
+      expect(comparison.cpcb.category).toBe("Moderate");
+      expect(comparison.usEpa.aqi).toBe(139);
+      expect(comparison.usEpa.category).toBe("Unhealthy for Sensitive Groups");
+      expect(comparison.satisfactoryIllusionAlert).toBe(false);
+      expect(comparison.explanation).toContain("117");
+      expect(comparison.explanation).toContain("Moderate");
+      expect(comparison.explanation).toContain("PM10");
+      expect(comparison.explanation).toContain("139");
+      expect(comparison.explanation).not.toContain("Satisfactory");
     });
 
     it("should NOT trigger alert when CPCB is already Moderate or worse (e.g. 75 µg/m³)", () => {
@@ -286,7 +307,7 @@ describe("Module 1: aqiBreakpoints", () => {
       // At severe PM2.5 = 250 µg/m³, CPCB = 400, EPA = ~325. Divergence delta < 0
       const at250 = compareAqiScales(250.0);
       expect(at250.divergenceDelta).toBeLessThan(0);
-      expect(at250.explanation).toContain("CPCB index is");
+      expect(at250.explanation).toContain("CPCB index (400 Very Poor) is");
 
       // At PM2.5 = 0, both are 0. Divergence delta = 0
       const at0 = compareAqiScales(0);
@@ -305,16 +326,23 @@ describe("Module 1: aqiBreakpoints", () => {
       expect(emptyResult.category).toBe("Good");
     });
 
-    it("should provide valid color-blind-safe tokens for all categories", () => {
+    it("should provide valid color-blind-safe tokens with WCAG AA badge contrast classes", () => {
       expect(COLOR_BLIND_SAFE_TOKENS.Good.hex).toBe("#009E73");
+      expect(COLOR_BLIND_SAFE_TOKENS.Good.bgClass).toBe("bg-emerald-800");
       expect(COLOR_BLIND_SAFE_TOKENS.Satisfactory.hex).toBe("#56B4E9");
       expect(COLOR_BLIND_SAFE_TOKENS.Moderate.hex).toBe("#E69F00");
+      expect(COLOR_BLIND_SAFE_TOKENS.Moderate.bgClass).toBe("bg-amber-800");
+      expect(COLOR_BLIND_SAFE_TOKENS.Moderate.textClass).toBe("text-amber-50");
       expect(COLOR_BLIND_SAFE_TOKENS["Unhealthy for Sensitive Groups"].hex).toBe(
         "#D55E00",
       );
       expect(COLOR_BLIND_SAFE_TOKENS.Unhealthy.hex).toBe("#CC79A7");
       expect(COLOR_BLIND_SAFE_TOKENS["Very Unhealthy"].hex).toBe("#7828C8");
+      expect(COLOR_BLIND_SAFE_TOKENS.Severe.bgClass).toBe("bg-red-950");
+      expect(COLOR_BLIND_SAFE_TOKENS.Severe.borderClass).toBe("border-red-500");
       expect(COLOR_BLIND_SAFE_TOKENS.Hazardous.hex).toBe("#7F0000");
+      expect(COLOR_BLIND_SAFE_TOKENS.Hazardous.bgClass).toBe("bg-rose-950");
+      expect(COLOR_BLIND_SAFE_TOKENS.Hazardous.borderClass).toBe("border-rose-500");
     });
 
     it("should correctly classify helper boundary functions", () => {

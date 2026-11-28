@@ -3,7 +3,7 @@
 ## Context
 - **Date Started**: 2026-11-27
 - **Product & Risk**: VayuShield — Next.js 15 / React 19 / TypeScript 5.7 urban air quality intelligence platform for Delhi-NCR & Indian cities combining deterministic atmospheric physics (`src/engine/`), multi-provider environmental aggregation (`src/services/`), and an AI briefing advisor (`geminiAdvisor.ts`). Breaking physics misleads health exposure advice; breaking API trust boundaries allows rate-limit bypass, unbounded Gemini/Google Maps spend, stale cache/TZ drift, or CSP weaknesses.
-- **Stack**: Next.js 15.5.29 (App Router, standalone Docker on Cloud Run `asia-south1`), React 19, TypeScript 5.7 (`strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`), Zod 4, `@google/genai` 3.6.1, Tailwind CSS 3.4, Vitest 3.0.5, Playwright 1.65.1 + `@axe-core/playwright`. Zero database / zero ORM.
+- **Stack**: Next.js 15.5.29 (App Router, standalone Docker on Cloud Run `asia-south1`), React 19, TypeScript 5.7 (`strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`), Zod 4, `@google/genai` 3.6.1, Tailwind CSS 3.4, Vitest 5.1.2, Playwright 1.65.1 + `@axe-core/playwright`. Zero database / zero ORM.
 - **Deployment & Scale**: Single/low-traffic stateless Cloud Run service behind Google Front End (GFE) reverse proxy; in-memory bounded rate limiter and `0.01°` grid LRU caches.
 - **Outbound Dependencies**: Google Maps Air Quality API, Open-Meteo Air Quality & Weather APIs, WAQI / AQICN, OpenAQ v3, NASA FIRMS (`VIIRS_SNPP_NRT`), Google Gemini API (`gemini-4-hydrogen`).
 - **Starting Modules (Three-Axis Heuristic)**: API routes (`src/app/api/*`), `src/services/airQualityAggregator.ts`, `src/services/rateLimiter.ts`, `src/services/geminiAdvisor.ts`, and core physics kernel (`src/engine/*`).

@@ -21,6 +21,7 @@ export interface UpwindContextCardProps {
  * Converts meteorological degrees (0-360) to 16-point compass cardinal string.
  */
 function degToCardinal(deg: number): string {
+  if (!Number.isFinite(deg)) return "N";
   const directions = [
     "N",
     "NNE",
@@ -46,22 +47,32 @@ function degToCardinal(deg: number): string {
 
 export function UpwindContextCard({ upwindContext, language }: UpwindContextCardProps) {
   const t = DICTIONARY[language].upwind;
-  const cardinal = degToCardinal(upwindContext.windDirectionDeg);
+  const safeWindDir = Number.isFinite(upwindContext.windDirectionDeg)
+    ? upwindContext.windDirectionDeg
+    : 0;
+  const safeWindSpeed = Number.isFinite(upwindContext.windSpeedKmh)
+    ? Math.max(0, upwindContext.windSpeedKmh)
+    : 0;
+  const safeNearestFireKm =
+    upwindContext.nearestFireKm !== null && Number.isFinite(upwindContext.nearestFireKm)
+      ? upwindContext.nearestFireKm
+      : null;
+  const cardinal = degToCardinal(safeWindDir);
 
   const getAlignmentDetails = () => {
     switch (upwindContext.alignment) {
       case "upwind_aligned":
         return {
-          title: "Upwind Plume Aligned",
-          badgeClass: "bg-amber-950/80 text-amber-300 border-amber-500/80",
+          title: t.upwindAlignedTitle,
+          badgeClass: "bg-amber-950/80 text-amber-200 border-amber-500/80",
           icon: AlertTriangle,
           iconColor: "text-amber-400",
           explanation: t.alignmentUpwindAligned,
         };
       case "crosswind":
         return {
-          title: "Crosswind / Lateral Dispersion",
-          badgeClass: "bg-sky-950/80 text-sky-300 border-sky-500/80",
+          title: t.crosswindTitle,
+          badgeClass: "bg-sky-950/80 text-sky-200 border-sky-500/80",
           icon: Wind,
           iconColor: "text-sky-400",
           explanation: t.alignmentCrosswind,
@@ -69,8 +80,8 @@ export function UpwindContextCard({ upwindContext, language }: UpwindContextCard
       case "none_detected":
       default:
         return {
-          title: "No Direct Upwind Plume",
-          badgeClass: "bg-emerald-950/80 text-emerald-300 border-emerald-500/80",
+          title: t.noneDetectedTitle,
+          badgeClass: "bg-emerald-950/80 text-emerald-200 border-emerald-500/80",
           icon: ShieldCheck,
           iconColor: "text-emerald-400",
           explanation: t.alignmentNoneDetected,
@@ -84,18 +95,18 @@ export function UpwindContextCard({ upwindContext, language }: UpwindContextCard
   return (
     <section
       aria-labelledby="upwind-context-heading"
-      className="rounded-2xl border border-white/[0.08] bg-[#0d1017] p-6 md:p-8 shadow-2xl relative overflow-hidden space-y-6"
+      className="rounded-2xl border border-white/15 bg-[#0d1017] p-6 md:p-8 shadow-2xl relative overflow-hidden space-y-6"
     >
       {/* Subtle top edge specular highlight */}
       <div className="absolute inset-x-0 top-0 h-[1px] bg-gradient-to-r from-transparent via-white/20 to-transparent" />
 
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-white/[0.06] pb-5">
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-white/[0.08] pb-5">
         <div>
           <div className="flex items-center gap-2 mb-1.5">
-            <span className="flex h-2 w-2 rounded-full bg-amber-400" />
+            <span className="flex h-2 w-2 rounded-full bg-amber-400" aria-hidden="true" />
             <span className="text-[11px] font-mono uppercase tracking-widest text-neutral-400 font-semibold">
-              Remote Sensing & Boundary Trajectory
+              {t.eyebrow}
             </span>
           </div>
           <h2
@@ -110,14 +121,14 @@ export function UpwindContextCard({ upwindContext, language }: UpwindContextCard
           </p>
         </div>
 
-        <div className="flex items-center gap-2 text-xs font-mono text-neutral-300 bg-white/[0.03] border border-white/[0.08] px-3.5 py-1.5 rounded-xl self-start md:self-auto">
+        <div className="flex items-center gap-2 text-xs font-mono text-neutral-300 bg-white/[0.03] border border-white/20 px-3.5 py-1.5 rounded-xl self-start md:self-auto">
           <Satellite className="h-4 w-4 text-sky-400" aria-hidden="true" />
-          <span>NASA FIRMS VIIRS S-NPP</span>
+          <span>{t.satelliteBadge}</span>
         </div>
       </div>
 
       {/* Plume Alignment Classification Banner */}
-      <div className="p-4 md:p-5 rounded-xl bg-white/[0.02] border border-white/[0.08] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div className="p-4 md:p-5 rounded-xl bg-white/[0.02] border border-white/15 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className={`p-2 rounded-lg bg-white/[0.04] ${alignmentInfo.iconColor}`}>
             <AlignmentIcon className="h-5 w-5" aria-hidden="true" />
@@ -142,7 +153,7 @@ export function UpwindContextCard({ upwindContext, language }: UpwindContextCard
       {/* Satellite Telemetry Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 font-mono text-xs">
         {/* Fire Count */}
-        <div className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.06] space-y-1">
+        <div className="p-4 rounded-xl bg-white/[0.02] border border-white/15 space-y-1">
           <div className="flex items-center justify-between text-neutral-400 text-[10px] uppercase">
             <span>{t.satelliteFireCountLabel}</span>
             <Flame className="h-4 w-4 text-amber-400" aria-hidden="true" />
@@ -150,38 +161,34 @@ export function UpwindContextCard({ upwindContext, language }: UpwindContextCard
           <div className="text-3xl font-light tracking-tight text-white">
             {upwindContext.fireHotspotCount}
           </div>
-          <span className="text-[10px] text-neutral-400 block">
-            Within ±1.5° regional bounding box
-          </span>
+          <span className="text-[10px] text-neutral-400 block">{t.withinBboxNote}</span>
         </div>
 
         {/* Nearest Fire Proximity */}
-        <div className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.06] space-y-1">
+        <div className="p-4 rounded-xl bg-white/[0.02] border border-white/15 space-y-1">
           <div className="flex items-center justify-between text-neutral-400 text-[10px] uppercase">
             <span>{t.nearestFireDistanceLabel}</span>
             <Compass className="h-4 w-4 text-sky-400" aria-hidden="true" />
           </div>
           <div className="text-3xl font-light tracking-tight text-white">
-            {upwindContext.nearestFireKm !== null
-              ? `${upwindContext.nearestFireKm.toFixed(1)} km`
-              : "None"}
+            {safeNearestFireKm !== null
+              ? `${safeNearestFireKm.toFixed(1)} km`
+              : t.noneValue}
           </div>
-          <span className="text-[10px] text-neutral-400 block">
-            Geodesic proximity to coordinates
-          </span>
+          <span className="text-[10px] text-neutral-400 block">{t.geodesicNote}</span>
         </div>
 
         {/* Wind Vector */}
-        <div className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.06] space-y-1">
+        <div className="p-4 rounded-xl bg-white/[0.02] border border-white/15 space-y-1">
           <div className="flex items-center justify-between text-neutral-400 text-[10px] uppercase">
             <span>{t.windVectorLabel}</span>
             <Wind className="h-4 w-4 text-emerald-400" aria-hidden="true" />
           </div>
           <div className="text-3xl font-light tracking-tight text-white">
-            {upwindContext.windSpeedKmh.toFixed(1)} km/h
+            {safeWindSpeed.toFixed(1)} km/h
           </div>
           <span className="text-[10px] text-neutral-400 block">
-            Direction: {upwindContext.windDirectionDeg.toFixed(0)}° ({cardinal})
+            {t.directionLabel} {safeWindDir.toFixed(0)}° ({cardinal})
           </span>
         </div>
       </div>
@@ -190,7 +197,7 @@ export function UpwindContextCard({ upwindContext, language }: UpwindContextCard
       <div
         role="region"
         aria-label={t.dispersionOutlookTitle}
-        className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.06] space-y-2 text-xs"
+        className="p-4 rounded-xl bg-white/[0.02] border border-white/15 space-y-2 text-xs"
       >
         <span className="font-mono text-neutral-400 uppercase tracking-wider text-[10px] font-bold block">
           {t.dispersionOutlookTitle}
@@ -198,8 +205,9 @@ export function UpwindContextCard({ upwindContext, language }: UpwindContextCard
         <p className="text-neutral-300 leading-relaxed font-normal">
           {alignmentInfo.explanation}
         </p>
-        <div className="text-[11px] text-neutral-400 font-mono pt-2 border-t border-white/[0.04]">
-          {upwindContext.scientificDisclaimer}
+        <div className="text-[11px] text-neutral-400 font-mono pt-2 border-t border-white/[0.08]">
+          {t.scientificDisclaimers[upwindContext.alignment] ??
+            upwindContext.scientificDisclaimer}
         </div>
       </div>
     </section>

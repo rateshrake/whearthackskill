@@ -356,14 +356,218 @@ describe("Service 3: airQualityAggregator", () => {
       expect(station?.stationName).toBe("OpenAQ Test Station");
       expect(station?.attribution).toContain("OpenAQ");
 
-      // Total upstream failure still returns resilient fallback payload
+      // Total upstream failure still returns resilient 48h deterministic fallback payload
       globalForecastCache.clear();
       globalFirmsCache.clear();
       globalStationCache.clear();
       globalThis.fetch = vi.fn().mockRejectedValue(new Error("Network down"));
       const fallback = await aggregateAirIntelligence(28.61, 77.21);
       expect(fallback.currentConditions.pm25).toBeGreaterThan(0);
-      expect(fallback.diurnalAnalysis.observations48h.length).toBeGreaterThan(0);
+      expect(fallback.diurnalAnalysis.observations48h).toHaveLength(48);
+      expect(fallback.diurnalAnalysis.cleanestToday).not.toBeNull();
+      expect(fallback.diurnalAnalysis.worstToday).not.toBeNull();
+      expect(fallback.diurnalAnalysis.cleanestTomorrow).not.toBeNull();
+      expect(fallback.diurnalAnalysis.worstTomorrow).not.toBeNull();
+
+      // Synthetic primary-outage fallback must NOT be cached for 60 minutes
+      const fallbackRetry = await aggregateAirIntelligence(28.61, 77.21);
+      expect(fallbackRetry.provenance.isCacheHit).toBe(false);
+    });
+
+    it("should merge real Open-Meteo relative_humidity_2m, keep multi-pollutant CPCB consistent in scale comparison, and handle OpenAQ /latest + invalid loc.id", async () => {
+      process.env.OPENAQ_API_KEY = "mock_openaq_key";
+
+      globalThis.fetch = vi.fn().mockImplementation((url: string | URL | Request) => {
+        const urlStr = url.toString();
+        if (urlStr.includes("air-quality-api.open-meteo.com")) {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                current: {
+                  pm2_5: 51.1,
+                  pm10: 125.0,
+                  nitrogen_dioxide: 30.0,
+                  ozone: 20.0,
+                  sulphur_dioxide: 10.0,
+                  carbon_monoxide: 600.0,
+                },
+                hourly: {
+                  time: [
+                    "2026-11-20T00:00",
+                    "2026-11-20T06:00",
+                    "2026-11-20T07:00",
+                    "2026-11-20T14:00",
+                    "2026-11-21T06:00",
+                  ],
+                  pm2_5: [60.0, 95.0, 92.0, 35.0, 90.0],
+                  pm10: [120.0, 170.0, 165.0, 70.0, 160.0],
+                },
+              }),
+              { status: 200 },
+            ),
+          );
+        }
+        if (urlStr.includes("api.open-meteo.com/v1/forecast")) {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                current: { wind_speed_10m: 12, wind_direction_10m: 315 },
+                hourly: {
+                  time: [
+                    "2026-11-20T00:00",
+                    "2026-11-20T06:00",
+                    "2026-11-20T07:00",
+                    "2026-11-20T14:00",
+                    "2026-11-21T06:00",
+                  ],
+                  relative_humidity_2m: [70, 84, 83, 48, 82],
+                },
+              }),
+              { status: 200 },
+            ),
+          );
+        }
+        if (urlStr.includes("api.openaq.org/v3/locations?")) {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                results: [
+                  {
+                    id: 4242,
+                    name: "OpenAQ Latest Sensor",
+                    owner: { name: "CPCB Community" },
+                    sensors: [{ id: 901, parameter: { name: "pm25" } }],
+                  },
+                ],
+              }),
+              { status: 200 },
+            ),
+          );
+        }
+        if (urlStr.includes("api.openaq.org/v3/locations/4242/latest")) {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                results: [{ sensorsId: 901, value: 64.5 }],
+              }),
+              { status: 200 },
+            ),
+          );
+        }
+        return Promise.resolve(new Response("Not found", { status: 404 }));
+      });
+
+      const agg = await aggregateAirIntelligence(28.61, 77.21);
+      // CQ-1: Multi-pollutant CPCB (117 Moderate, PM10) must match scaleComparisonExplanation
+      expect(agg.currentConditions.cpcb.aqi).toBe(117);
+      expect(agg.currentConditions.cpcb.category).toBe("Moderate");
+      expect(agg.currentConditions.usEpa.aqi).toBe(139);
+      expect(agg.currentConditions.scaleComparisonExplanation).toContain("117");
+      expect(agg.currentConditions.scaleComparisonExplanation).toContain("Moderate");
+      expect(agg.currentConditions.scaleComparisonExplanation).not.toContain(
+        "Satisfactory",
+      );
+
+      // CQ-2: Real relative_humidity_2m (84% -> hygroscopic correction active)
+      expect(agg.diurnalAnalysis.observations48h[1]?.humidityPct).toBe(84);
+      expect(agg.diurnalAnalysis.worstToday?.wasHumidityAdjusted).toBe(true);
+
+      // CQ-24: OpenAQ /locations/{id}/latest path
+      expect(agg.groundStation?.stationName).toBe("OpenAQ Latest Sensor");
+      expect(agg.groundStation?.stationPm25).toBe(64.5);
+
+      // SEC-8: Non-integer OpenAQ loc.id must not trigger /latest fetch
+      globalStationCache.clear();
+      globalThis.fetch = vi.fn().mockImplementation((url: string | URL | Request) => {
+        const urlStr = url.toString();
+        if (urlStr.includes("api.openaq.org/v3/locations?")) {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                results: [
+                  {
+                    id: 12.5,
+                    name: "Malformed ID Station",
+                    sensors: [{ id: 1, parameter: { name: "pm25" } }],
+                  },
+                ],
+              }),
+              { status: 200 },
+            ),
+          );
+        }
+        throw new Error(`Unexpected URL called: ${urlStr}`);
+      });
+      const skipped = await fetchGroundStationData(-0.001, -0.002, 50);
+      expect(skipped).toBeNull();
+    });
+
+    it("should ingest Google Maps forecast:lookup when available and redact Bearer/header secrets", async () => {
+      process.env.GOOGLE_MAPS_API_KEY = "gmaps_super_secret_token_123";
+      globalThis.fetch = vi.fn().mockImplementation((url: string | URL | Request) => {
+        const urlStr = url.toString();
+        if (urlStr.includes("currentConditions:lookup")) {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                pollutants: [{ code: "pm25", concentration: { value: 65.0 } }],
+              }),
+              { status: 200 },
+            ),
+          );
+        }
+        if (urlStr.includes("forecast:lookup")) {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                hourlyForecasts: [
+                  {
+                    dateTime: "2026-11-20T06:00:00Z",
+                    pollutants: [
+                      { code: "pm25", concentration: { value: 90.0 } },
+                      { code: "pm10", concentration: { value: 150.0 } },
+                    ],
+                  },
+                  {
+                    dateTime: "2026-11-20T14:00:00Z",
+                    pollutants: [
+                      { code: "pm25", concentration: { value: 42.0 } },
+                      { code: "pm10", concentration: { value: 80.0 } },
+                    ],
+                  },
+                ],
+              }),
+              { status: 200 },
+            ),
+          );
+        }
+        if (urlStr.includes("api.open-meteo.com/v1/forecast")) {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                hourly: {
+                  time: ["2026-11-20T06:00", "2026-11-20T14:00"],
+                  relative_humidity_2m: [83, 45],
+                },
+              }),
+              { status: 200 },
+            ),
+          );
+        }
+        return Promise.resolve(new Response("Not found", { status: 404 }));
+      });
+
+      const gm = await fetchPrimaryAirQuality(28.61, 77.21);
+      expect(gm.source).toBe("google_maps");
+      expect(gm.forecastObservations).toHaveLength(2);
+      expect(gm.forecastObservations[0]?.pm25).toBe(90.0);
+      expect(gm.forecastObservations[0]?.humidityPct).toBe(83);
+
+      const scrubbed = redactSecrets(
+        "Authorization: Bearer abc123secretToken x-goog-api-key: gmaps_super_secret_token_123",
+      );
+      expect(scrubbed).not.toContain("abc123secretToken");
+      expect(scrubbed).not.toContain("gmaps_super_secret_token_123");
     });
 
     it("should normalize Open-Meteo UTC timestamps, send Google Maps key via header, and redact secret URLs", async () => {
@@ -404,6 +608,33 @@ describe("Service 3: airQualityAggregator", () => {
       expect(res.source).toBe("google_maps");
       expect(capturedUrl).not.toContain("gmaps_header_secret");
       expect(capturedHeader).toBe("gmaps_header_secret");
+    });
+
+    it("falls back to 48h deterministic diurnal curve when Open-Meteo returns empty hourly arrays", async () => {
+      globalThis.fetch = vi.fn().mockImplementation((url: string | URL | Request) => {
+        const urlStr = url.toString();
+        if (urlStr.includes("air-quality-api.open-meteo.com")) {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                current: { pm2_5: 80, pm10: 150 },
+                hourly: { time: [] },
+              }),
+              { status: 200 },
+            ),
+          );
+        }
+        return Promise.resolve(new Response("Not found", { status: 404 }));
+      });
+
+      const agg = await aggregateAirIntelligence(28.61, 77.21);
+      expect(agg.currentConditions.pm25).toBe(80);
+      expect(agg.currentConditions.pm10).toBe(150);
+      expect(agg.diurnalAnalysis.observations48h).toHaveLength(48);
+      expect(agg.diurnalAnalysis.cleanestToday).not.toBeNull();
+      expect(agg.diurnalAnalysis.worstToday).not.toBeNull();
+      expect(agg.diurnalAnalysis.cleanestTomorrow).not.toBeNull();
+      expect(agg.diurnalAnalysis.worstTomorrow).not.toBeNull();
     });
   });
 });

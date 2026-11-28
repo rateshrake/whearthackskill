@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import {
   applyApiSecurityHeaders,
-  BASE_SECURITY_HEADERS,
+  applySecurityHeaders,
   buildDocumentCsp,
   generateCspNonce,
 } from "@/services/securityHeaders";
@@ -26,12 +26,9 @@ export function middleware(request: NextRequest) {
     },
   });
 
-  for (const [header, val] of Object.entries(BASE_SECURITY_HEADERS)) {
-    response.headers.set(header, val);
-  }
-  response.headers.set("Content-Security-Policy", cspHeader);
-
-  return response;
+  return applySecurityHeaders(response, {
+    "Content-Security-Policy": cspHeader,
+  });
 }
 
 export const config = {

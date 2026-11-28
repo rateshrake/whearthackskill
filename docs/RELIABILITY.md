@@ -14,7 +14,7 @@
 ## Query & Resource Findings
 - **In-Memory Rate Limiter**: Bounded to `maxEntries: 10_000` with LRU eviction and periodic stale sweeps every `100` checks (plus in-place pruning on denied requests).
 - **Grid Caches**: Bounded LRU capacities (`1000` station, `500` forecast, `500` FIRMS) with `0.01°` coordinate quantization (normalized `+0`) and single-flight request coalescing per `gridKey`.
-- **Client Fetch Cancellation**: `src/app/page.tsx` aborts in-flight `/api/intelligence` requests via `AbortController` + monotonic request ID guard to prevent stale updates.
+- **Client Fetch Cancellation**: `src/hooks/useAirIntelligence.ts` aborts in-flight `/api/intelligence` requests via `AbortController` + monotonic request ID guard to prevent stale updates.
 
 ## Health Checks & Metrics
 - **Deep Health Check**: `GET /api/health` (`src/app/api/health/route.ts`) returns `200` with `status` (`"ok"` or `"degraded"` when any circuit breaker is open), uptime, cache stats, rate-limiter capacity stats, circuit breaker states, RED metrics, and boolean provider config flags (zero secret values).

@@ -16,9 +16,9 @@ The table below catalogs every tool, framework, runtime API, and cloud service u
 | **Language & Typing**         | TypeScript                          | `5.7.3`                      | Type system configured with `"strict": true`, `"noUncheckedIndexedAccess": true`, and zero `any`.     |
 | **Styling & Icons**           | Tailwind CSS & PostCSS              | `3.4.17` / `8.5.33`          | Utility-first styling with high-contrast accessibility tokens; Lucide React `0.475.0` for icons.      |
 | **Validation & Schema**       | Zod                                 | `4.6.7`                      | Runtime type validation for API query params, coordinates, and Gemini JSON outputs.                   |
-| **Unit & Physics Testing**    | Vitest & `@vitest/coverage-v8`      | `3.0.5`                      | In-memory unit test runner executing 112 tests across 10 suites in ~3.0s with v8 coverage.            |
-| **E2E & Accessibility QA**    | Playwright & `@axe-core/playwright` | `1.65.1` / `4.14.0`          | Headless Chromium automation and automated WCAG 2.1 AA/AAA rule evaluation.                           |
-| **Static Code Hygiene**       | ESLint & Prettier                   | `9.20.1` / `3.5.1`           | Flat-config static linting (zero warnings) and code formatting.                                       |
+| **Unit & Physics Testing**    | Vitest & `@vitest/coverage-v8`      | `5.1.2`                      | In-memory unit & component test runner executing 153 tests across 12 suites with v8 coverage.         |
+| **E2E & Accessibility QA**    | Playwright & `@axe-core/playwright` | `1.65.1` / `4.14.0`          | Headless Chromium automation and automated WCAG 2.1 AA/AAA rule evaluation against standalone server. |
+| **Static Code Hygiene**       | ESLint & Prettier                   | `9.20.1` / `3.5.1`           | Flat-config static linting (`@next/next`, `react-hooks`, `jsx-a11y`) and Prettier formatting (`src/` + `e2e/`). |
 | **AI Coding Assistant**       | Google Antigravity (Gemini 2.5 Pro) | System Agent                 | Agentic coding environment executing multi-turn architectural decomposition, coding, and testing.     |
 | **Generative Decision Layer** | `@google/genai` SDK                 | `3.6.1` (`gemini-4-hydrogen`) | Structured JSON Interactions advisor for contextual family briefings and RWA notices.          |
 | **Environmental APIs**        | Google Maps Air Quality API         | `v1`                         | Primary current conditions and 48-hour continuous hourly forecasts.                                   |
@@ -103,7 +103,7 @@ flowchart LR
 ### Phase 2: Resilient Cloud Run API Layer & Upstream Adapters (`src/services/`)
 
 - **Prompt Strategy:** Shifted to cloud architecture, API reliability, and security. Specified the grid rounding algorithm ($0.01^\circ$), dual-tier LRU cache with sequence eviction, sliding-window rate limiter, and parallel `Promise.allSettled()` ingestion across Google Maps, Open-Meteo, WAQI, and NASA FIRMS.
-- **Constraint Enforced:** Zero client secret exposure. Strict Zod parameter parsing. Guarded Gemini 2.5 Flash decision layer with digit-rejection regex and deterministic bilingual fallbacks.
+- **Constraint Enforced:** Zero client secret exposure. Strict Zod parameter parsing. Guarded `gemini-4-hydrogen` Interactions decision layer (`@google/genai`) with Unicode digit-rejection regex and deterministic bilingual fallbacks.
 - **Outcome:** Vitest test count increased from 63 to 100 tests. Proved resilience under mock network failures, missing API keys, rate-limit threshold crossings, and LLM digit injection attempts.
 
 ### Phase 3: Accessible Bilingual Frontend (`src/components/`, `src/app/`)
@@ -123,7 +123,7 @@ flowchart LR
   2. _Duplicate Region Landmarks:_ Multiple sections configured with `role="region"` lacked unique accessible names, triggering `landmark-unique` violations. Added distinct `aria-label` attributes to every card.
   3. _Redundant Network Requests:_ Identified that changing archetypes was triggering an unintended API refetch due to a stale dependency array in `useEffect`. Replaced with a React `useRef`, preserving the zero-network local computation guarantee.
   4. _Dependency Vulnerabilities:_ `npm audit --audit-level=high` caught vulnerable sub-dependencies in `tinypool` and `postcss`. Upgraded Next.js to `15.5.29` and added package overrides to reach 0 high/critical vulnerabilities.
-- **Outcome:** 2 comprehensive Playwright E2E scenarios passing with **0 axe-core accessibility violations**, multi-stage Docker build verified, and standalone server responding in **253 ms**.
+- **Outcome:** 3 comprehensive Playwright E2E scenarios (`Severe`, `Satisfactory`, `Moderate` in EN + HI) passing with **0 axe-core accessibility violations** and **0 CSP violations**, multi-stage Docker build verified, and standalone server verified via `npm run start:standalone`.
 
 ### Phase 5: Technical Documentation & Architecture Traceability (`README.md`, `PROMPTS_AND_TOOLS.md`)
 
@@ -140,7 +140,7 @@ VayuShield was built through a high-leverage synergy between human systems engin
 | :-------------------------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Problem Formulation & Atmospheric Physics** | Formulated the core urban air quality paradoxes: identified the CPCB vs. US EPA 2024 "Satisfactory Illusion", diurnal boundary layer inversion timing, and indoor cultural combustion risks (agarbatti/mosquito coils). | Synthesized scientific equations from literature (deliquescence growth factor, single-zone steady-state mass balance, and exponential decay models). |
 | **Regulatory & Standards Verification**       | Hand-verified breakpoint thresholds against official gazette publications: CPCB National AQI guidelines and US EPA May 6, 2024 revised annual $\text{PM}_{2.5}$ rules.                                                  | Generated exhaustive boundary-edge unit tests covering every piecewise threshold, linear slope, and rounding rule.                                   |
-| **Architectural Threat Modeling & Security**  | Mandated the **Split-Brain Architecture**: strictly prohibited LLMs from performing arithmetic. Designed the digit-rejection guardrail (`/\d/`), API key isolation, and sliding-window rate limiting.                   | Generated the Zod schemas, structured JSON validation wrappers, and mocked adversarial test payloads to verify rejection behavior.                   |
+| **Architectural Threat Modeling & Security**  | Mandated the **Split-Brain Architecture**: strictly prohibited LLMs from performing arithmetic. Designed the Unicode digit-rejection guardrail (`/\p{Nd}/u`), API key isolation, and sliding-window rate limiting. | Generated the Zod schemas, structured JSON validation wrappers, and mocked adversarial test payloads to verify rejection behavior. |
 | **System Layering & Prompt Decomposition**    | Decomposed the complex problem into 5 decoupled phases (Physics Engine $\to$ Cloud API $\to$ UI Components $\to$ E2E/Axe Hardening $\to$ Documentation).                                                                | Rapidly implemented boilerplate, interfaces, service wrappers, and mock data fixtures adhering strictly to each specification.                       |
 | **Accessibility & Design Tokens**             | Defined the accessible contrast hierarchy and color-blind-safe palette (Tol & Okabe-Ito tokens). Required all visual badges to be paired with explicit text.                                                            | Implemented Tailwind utility styling, ARIA attributes (`aria-live="polite"`, `aria-label`, `<section>`), and semantic HTML5 landmarks.               |
 | **Linguistic & Cultural Translation Review**  | Reviewed Hindi terminology and Devanagari typography to ensure natural cadence and clarity in urgent advisories (e.g., _वायु गुणवत्ता सूचकांक_, _असंतोषजनक वास्तविकता_, _गंभीर स्मॉग चेतावनी_).                                   | Generated initial bilingual translation dictionaries (`src/i18n/dictionary.ts`) ensuring 100% key-for-key parity between English and Hindi.          |
@@ -153,8 +153,8 @@ VayuShield was built through a high-leverage synergy between human systems engin
 
 All statements, file references, test statistics, and configuration commands in this document and in `README.md` have been directly verified against the actual repository files and test execution logs:
 
-- **Unit Tests:** 112 passing across 10 test files (`npm run test`)
-- **Code Coverage:** 99.81% Statements, 96.89% Branches, 100% Functions (`npm run test:coverage`)
-- **End-to-End Tests:** 2 scenarios passing with 0 axe-core violations in 14.7s (`npm run test:e2e`)
-- **Production Server:** Standalone Next.js bundle starts on port 8080 and serves HTTP 200 in 253 ms
+- **Unit & Component Tests:** 153 passing across 12 test files (`npm run test`)
+- **Code Coverage:** 93.09% Statements, 78.36% Branches, 96.21% Functions, 94.07% Lines across full codebase (`npm run test:coverage`)
+- **End-to-End Tests:** 3 scenarios passing with 0 axe-core violations and 0 CSP violations in ~25s (`npm run test:e2e`)
+- **Production Server:** Standalone Next.js bundle starts on port 3000/8080 with `poweredByHeader: false`
 - **Credentials:** Zero secrets committed to source control; 100% isolation via Google Cloud Secret Manager

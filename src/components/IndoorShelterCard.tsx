@@ -27,6 +27,7 @@ export function IndoorShelterCard({
   language,
 }: IndoorShelterCardProps) {
   const t = DICTIONARY[language].indoor;
+  const safeOutdoorPm25 = Number.isFinite(outdoorPm25) ? Math.max(0, outdoorPm25) : 0;
 
   const [lengthMeters, setLengthMeters] = useState<number>(
     initialRoomDimensions.lengthMeters,
@@ -70,18 +71,18 @@ export function IndoorShelterCard({
 
   // Steady-state indoor modeling for the 3 regimes
   const openWindowsState = modelSteadyStateIndoorPm25(
-    outdoorPm25,
+    safeOutdoorPm25,
     dimensions,
     "open_windows",
   );
   const closedNoFilterState = modelSteadyStateIndoorPm25(
-    outdoorPm25,
+    safeOutdoorPm25,
     dimensions,
     "closed_windows_no_filter",
   );
-  const targetCadr = calculateRequiredCadr(outdoorPm25, dimensions);
+  const targetCadr = calculateRequiredCadr(safeOutdoorPm25, dimensions);
   const closedHepaState = modelSteadyStateIndoorPm25(
-    outdoorPm25,
+    safeOutdoorPm25,
     dimensions,
     "closed_windows_hepa",
     targetCadr.requiredCadrM3h,
@@ -99,18 +100,21 @@ export function IndoorShelterCard({
   return (
     <section
       aria-labelledby="indoor-shelter-heading"
-      className="rounded-2xl border border-white/[0.08] bg-[#0d1017] p-6 md:p-8 shadow-2xl relative overflow-hidden space-y-6"
+      className="rounded-2xl border border-white/15 bg-[#0d1017] p-6 md:p-8 shadow-2xl relative overflow-hidden space-y-6"
     >
       {/* Subtle top edge specular highlight */}
       <div className="absolute inset-x-0 top-0 h-[1px] bg-gradient-to-r from-transparent via-white/20 to-transparent" />
 
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-white/[0.06] pb-5">
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-white/[0.08] pb-5">
         <div>
           <div className="flex items-center gap-2 mb-1.5">
-            <span className="flex h-2 w-2 rounded-full bg-emerald-400" />
+            <span
+              className="flex h-2 w-2 rounded-full bg-emerald-400"
+              aria-hidden="true"
+            />
             <span className="text-[11px] font-mono uppercase tracking-widest text-neutral-400 font-semibold">
-              First-Principles Microenvironment Physics
+              {t.eyebrow}
             </span>
           </div>
           <h2
@@ -125,16 +129,16 @@ export function IndoorShelterCard({
           </p>
         </div>
 
-        <div className="flex items-center gap-2 text-xs font-mono text-neutral-300 bg-white/[0.03] border border-white/[0.08] px-3.5 py-1.5 rounded-xl self-start md:self-auto">
+        <div className="flex items-center gap-2 text-xs font-mono text-neutral-300 bg-white/[0.03] border border-white/20 px-3.5 py-1.5 rounded-xl self-start md:self-auto">
           <Layers className="h-4 w-4 text-emerald-400" aria-hidden="true" />
           <span>
-            Room Volume: <strong>{roomVolumeM3.toFixed(1)} m³</strong>
+            {t.volumeLabel} <strong>{roomVolumeM3.toFixed(1)} m³</strong>
           </span>
         </div>
       </div>
 
       {/* Room Dimensions Sliders Grid */}
-      <div className="p-5 rounded-xl bg-white/[0.02] border border-white/[0.06] space-y-4">
+      <div className="p-5 rounded-xl bg-white/[0.02] border border-white/15 space-y-4">
         <h3 className="text-xs font-mono uppercase tracking-wider text-neutral-400 font-semibold">
           {t.roomDimensionsTitle}
         </h3>
@@ -142,7 +146,7 @@ export function IndoorShelterCard({
           {/* Length */}
           <div className="space-y-2">
             <div className="flex justify-between text-xs font-mono">
-              <label htmlFor={lengthId} className="text-neutral-400 font-medium">
+              <label htmlFor={lengthId} className="text-neutral-300 font-medium">
                 {t.lengthLabel}
               </label>
               <span className="text-white font-bold">{lengthMeters.toFixed(1)} m</span>
@@ -154,18 +158,18 @@ export function IndoorShelterCard({
               max="12.0"
               step="0.5"
               value={lengthMeters}
+              aria-valuetext={`${lengthMeters.toFixed(1)} m`}
               onChange={(e) =>
                 handleDimensionChange("lengthMeters", parseFloat(e.target.value))
               }
               className="w-full"
-              aria-label={`${t.lengthLabel}: ${lengthMeters} m`}
             />
           </div>
 
           {/* Width */}
           <div className="space-y-2">
             <div className="flex justify-between text-xs font-mono">
-              <label htmlFor={widthId} className="text-neutral-400 font-medium">
+              <label htmlFor={widthId} className="text-neutral-300 font-medium">
                 {t.widthLabel}
               </label>
               <span className="text-white font-bold">{widthMeters.toFixed(1)} m</span>
@@ -177,18 +181,18 @@ export function IndoorShelterCard({
               max="10.0"
               step="0.5"
               value={widthMeters}
+              aria-valuetext={`${widthMeters.toFixed(1)} m`}
               onChange={(e) =>
                 handleDimensionChange("widthMeters", parseFloat(e.target.value))
               }
               className="w-full"
-              aria-label={`${t.widthLabel}: ${widthMeters} m`}
             />
           </div>
 
           {/* Height */}
           <div className="space-y-2">
             <div className="flex justify-between text-xs font-mono">
-              <label htmlFor={heightId} className="text-neutral-400 font-medium">
+              <label htmlFor={heightId} className="text-neutral-300 font-medium">
                 {t.heightLabel}
               </label>
               <span className="text-white font-bold">{heightMeters.toFixed(1)} m</span>
@@ -200,11 +204,11 @@ export function IndoorShelterCard({
               max="4.5"
               step="0.1"
               value={heightMeters}
+              aria-valuetext={`${heightMeters.toFixed(1)} m`}
               onChange={(e) =>
                 handleDimensionChange("heightMeters", parseFloat(e.target.value))
               }
               className="w-full"
-              aria-label={`${t.heightLabel}: ${heightMeters} m`}
             />
           </div>
         </div>
@@ -217,7 +221,7 @@ export function IndoorShelterCard({
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {/* Regime 1: Open Windows */}
-          <div className="p-4 rounded-xl bg-rose-950/20 border border-rose-500/20 space-y-2">
+          <div className="p-4 rounded-xl bg-rose-950/20 border border-rose-500/30 space-y-2">
             <span className="text-xs font-mono font-bold uppercase tracking-wider text-rose-300 block">
               {t.openWindowsLabel}
             </span>
@@ -225,7 +229,7 @@ export function IndoorShelterCard({
               {openWindowsState.indoorPm25.toFixed(1)} µg/m³
             </div>
             <div className="text-xs text-neutral-400 font-mono">
-              Infiltration:{" "}
+              {t.infiltrationLabel}{" "}
               <strong className="text-rose-400">
                 {(openWindowsState.infiltrationRatio * 100).toFixed(0)}%
               </strong>
@@ -233,7 +237,7 @@ export function IndoorShelterCard({
           </div>
 
           {/* Regime 2: Closed Windows, No Purifier */}
-          <div className="p-4 rounded-xl bg-amber-950/20 border border-amber-500/20 space-y-2">
+          <div className="p-4 rounded-xl bg-amber-950/20 border border-amber-500/30 space-y-2">
             <span className="text-xs font-mono font-bold uppercase tracking-wider text-amber-300 block">
               {t.closedNoFilterLabel}
             </span>
@@ -241,7 +245,7 @@ export function IndoorShelterCard({
               {closedNoFilterState.indoorPm25.toFixed(1)} µg/m³
             </div>
             <div className="text-xs text-neutral-400 font-mono">
-              Infiltration:{" "}
+              {t.infiltrationLabel}{" "}
               <strong className="text-amber-400">
                 {(closedNoFilterState.infiltrationRatio * 100).toFixed(0)}%
               </strong>
@@ -249,7 +253,7 @@ export function IndoorShelterCard({
           </div>
 
           {/* Regime 3: Closed Windows + HEPA Purifier */}
-          <div className="p-4 rounded-xl bg-emerald-950/20 border border-emerald-500/20 space-y-2">
+          <div className="p-4 rounded-xl bg-emerald-950/20 border border-emerald-500/30 space-y-2">
             <span className="text-xs font-mono font-bold uppercase tracking-wider text-emerald-300 block">
               {t.closedHepaLabel}
             </span>
@@ -257,7 +261,7 @@ export function IndoorShelterCard({
               {closedHepaState.indoorPm25.toFixed(1)} µg/m³
             </div>
             <div className="text-xs text-neutral-400 font-mono">
-              Infiltration:{" "}
+              {t.infiltrationLabel}{" "}
               <strong className="text-emerald-400">
                 {(closedHepaState.infiltrationRatio * 100).toFixed(0)}%
               </strong>
@@ -267,7 +271,7 @@ export function IndoorShelterCard({
       </div>
 
       {/* CADR Sizing & Recommendation Banner */}
-      <div className="p-5 rounded-xl bg-white/[0.02] border border-white/[0.08] space-y-3">
+      <div className="p-5 rounded-xl bg-white/[0.02] border border-white/15 space-y-3">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <Wind className="h-4 w-4 text-sky-400" aria-hidden="true" />
@@ -276,37 +280,37 @@ export function IndoorShelterCard({
             </h3>
           </div>
           <span className="text-[11px] font-mono text-neutral-400">
-            Target Infiltration: ≤ 21%
+            {t.targetInfiltrationBadge}
           </span>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 font-mono text-xs pt-1">
-          <div className="bg-white/[0.02] p-3 rounded-lg border border-white/[0.04]">
+          <div className="bg-white/[0.02] p-3 rounded-lg border border-white/10">
             <span className="text-neutral-400 block text-[10px] uppercase">
-              Clean Air Delivery
+              {t.cleanAirDeliveryLabel}
             </span>
             <strong className="text-white text-lg block mt-0.5">
               {targetCadr.requiredCadrM3h.toFixed(0)} m³/h
             </strong>
-            <span className="text-neutral-400 text-[10px]">Required CADR (m³/h)</span>
+            <span className="text-neutral-400 text-[10px]">{t.requiredCadrSubLabel}</span>
           </div>
-          <div className="bg-white/[0.02] p-3 rounded-lg border border-white/[0.04]">
+          <div className="bg-white/[0.02] p-3 rounded-lg border border-white/10">
             <span className="text-neutral-400 block text-[10px] uppercase">
-              Imperial CADR
+              {t.imperialCadrLabel}
             </span>
             <strong className="text-neutral-200 text-lg block mt-0.5">
               {targetCadr.requiredCadrCfm.toFixed(0)} CFM
             </strong>
-            <span className="text-neutral-400 text-[10px]">Imperial flow rate</span>
+            <span className="text-neutral-400 text-[10px]">{t.imperialFlowLabel}</span>
           </div>
-          <div className="bg-white/[0.02] p-3 rounded-lg border border-white/[0.04]">
+          <div className="bg-white/[0.02] p-3 rounded-lg border border-white/10">
             <span className="text-neutral-400 block text-[10px] uppercase">
-              Air Exchange Rate
+              {t.airExchangeLabel}
             </span>
             <strong className="text-emerald-400 text-lg block mt-0.5">
               {targetCadr.requiredAchHepa.toFixed(1)} ACH
             </strong>
-            <span className="text-neutral-400 text-[10px]">Air changes per hour</span>
+            <span className="text-neutral-400 text-[10px]">{t.achSubLabel}</span>
           </div>
         </div>
       </div>
@@ -315,17 +319,24 @@ export function IndoorShelterCard({
       <div
         role="region"
         aria-label={t.combustionAuditTitle}
-        className="space-y-4 border-t border-white/[0.06] pt-6"
+        className="space-y-4 border-t border-white/[0.08] pt-6"
       >
-        <div className="flex items-center gap-2">
-          <Flame className="h-4 w-4 text-amber-400" aria-hidden="true" />
-          <h3 className="text-xs font-mono uppercase tracking-wider text-neutral-400 font-semibold">
-            {t.combustionAuditTitle}
-          </h3>
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <Flame className="h-4 w-4 text-amber-400" aria-hidden="true" />
+            <h3 className="text-xs font-mono uppercase tracking-wider text-neutral-300 font-semibold">
+              {t.combustionAuditTitle}
+            </h3>
+          </div>
+          <p className="text-xs text-neutral-400">{t.combustionAuditSubtitle}</p>
         </div>
 
         {/* Combustion Source Buttons */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div
+          role="group"
+          aria-label={t.triggerSelectLabel}
+          className="grid grid-cols-1 sm:grid-cols-3 gap-3"
+        >
           {(Object.keys(COMBUSTION_EVENT_PROFILES) as CombustionEventType[]).map(
             (cKey) => {
               const profile = COMBUSTION_EVENT_PROFILES[cKey];
@@ -337,16 +348,18 @@ export function IndoorShelterCard({
                   type="button"
                   aria-pressed={isSelected}
                   onClick={() => setSelectedCombustion(cKey)}
-                  className={`p-3.5 rounded-xl text-left border transition-all ${
+                  className={`p-3.5 rounded-xl text-left border transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 ${
                     isSelected
-                      ? "bg-amber-950/30 border-amber-500 text-white shadow-md"
-                      : "bg-white/[0.02] border-white/[0.06] text-neutral-400 hover:text-white hover:bg-white/[0.04]"
+                      ? "bg-amber-950/30 border-amber-400 text-white shadow-md"
+                      : "bg-white/[0.02] border-white/40 text-neutral-300 hover:text-white hover:bg-white/[0.06]"
                   }`}
                 >
-                  <div className="font-semibold text-xs text-white">{profile.label}</div>
+                  <div className="font-semibold text-xs text-white">
+                    {t.combustionLabels[cKey]}
+                  </div>
                   <div className="text-[10px] font-mono text-neutral-400 mt-1">
-                    Peak: +{(profile.emissionRateUgPerMin / 1000).toFixed(1)} mg/min
-                    emission
+                    {t.emissionPeakLabel} +
+                    {(profile.emissionRateUgPerMin / 1000).toFixed(1)} mg/min
                   </div>
                 </button>
               );
@@ -355,15 +368,20 @@ export function IndoorShelterCard({
         </div>
 
         {/* Selected Combustion Telemetry Card */}
-        <div className="p-4 rounded-xl bg-amber-950/20 border border-amber-500/20 space-y-2.5">
+        <div
+          role="status"
+          aria-live="polite"
+          className="p-4 rounded-xl bg-amber-950/20 border border-amber-500/30 space-y-2.5"
+        >
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-amber-500/20 pb-2">
             <strong className="text-white text-sm">
-              {COMBUSTION_EVENT_PROFILES[selectedCombustion].label}
+              {t.combustionLabels[selectedCombustion]}
             </strong>
             <span className="text-[11px] font-mono text-amber-300">
-              Clearance Time to 90%:{" "}
+              {t.clearance90Label}{" "}
               <strong>
-                {spikeEstimate.recoveryTimesMinutes.closedWindowsWithHepa.toFixed(0)} min
+                {spikeEstimate.recoveryTimesMinutes.closedWindowsWithHepa.toFixed(0)}{" "}
+                {t.minutesUnit}
               </strong>
             </span>
           </div>

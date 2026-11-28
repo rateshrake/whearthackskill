@@ -46,6 +46,10 @@ export class SlidingWindowRateLimiter {
     this.purgeEveryChecks = Math.max(1, config.purgeEveryChecks ?? 100);
   }
 
+  private computeResetSeconds(oldestTimestamp: number, now: number): number {
+    return Math.max(1, Math.ceil((oldestTimestamp + this.windowMs - now) / 1000));
+  }
+
   /**
    * Evaluates if the IP is allowed to proceed under the current sliding window.
    */
@@ -67,10 +71,7 @@ export class SlidingWindowRateLimiter {
       this.hits.set(key, timestamps);
 
       const oldestInWindow = timestamps[0] ?? now;
-      const resetSeconds = Math.max(
-        1,
-        Math.ceil((oldestInWindow + this.windowMs - now) / 1000),
-      );
+      const resetSeconds = this.computeResetSeconds(oldestInWindow, now);
 
       return {
         allowed: false,
@@ -98,10 +99,7 @@ export class SlidingWindowRateLimiter {
 
     const remaining = this.maxRequests - timestamps.length;
     const oldestInWindow = timestamps[0] ?? now;
-    const resetSeconds = Math.max(
-      1,
-      Math.ceil((oldestInWindow + this.windowMs - now) / 1000),
-    );
+    const resetSeconds = this.computeResetSeconds(oldestInWindow, now);
 
     return {
       allowed: true,
@@ -154,6 +152,13 @@ export class SlidingWindowRateLimiter {
 
 export const globalRateLimiter = new SlidingWindowRateLimiter({
   maxRequests: 30,
+  windowMs: 60 * 1000,
+  maxEntries: 10_000,
+  purgeEveryChecks: 100,
+});
+
+export const globalAdvisorRateLimiter = new SlidingWindowRateLimiter({
+  maxRequests: 10,
   windowMs: 60 * 1000,
   maxEntries: 10_000,
   purgeEveryChecks: 100,

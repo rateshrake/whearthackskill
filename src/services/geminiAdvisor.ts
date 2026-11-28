@@ -17,7 +17,8 @@
 import { GoogleGenAI } from "@google/genai";
 import { z } from "zod";
 import type { HouseholdArchetype, GrapStageId } from "@/engine";
-import type { UpwindAlignment } from "./airQualityAggregator";
+import type { UpwindAlignment } from "./providers/upwindFire";
+import { CACHE_TTL_MS, globalAdvisorCache } from "./gridCache";
 import { getCircuitBreaker, redactSecrets } from "./resilientHttp";
 import { recordUpstreamMetric } from "./observability";
 
@@ -78,6 +79,7 @@ const ADVISOR_RESPONSE_JSON_SCHEMA = {
     topActionIds: {
       type: "array",
       minItems: 1,
+      maxItems: 8,
       items: { type: "string" },
     },
     familyBriefing: { type: "string" },
@@ -118,8 +120,8 @@ export function generateDeterministicFallback(input: AdvisorMetricsInput): Advis
   const safeGrapName = sanitizePromptText(input.grapStageName);
 
   if (isHindi) {
-    const illusionWarning = input.satisfactoryIllusionAlert
-      ? "चेतावनी: स्थानीय सूचकांक इसे संतोषजनक दिखा सकता है, परंतु अंतरराष्ट्रीय स्वास्थ्य मानकों के अनुसार यह संवेदनशील व्यक्तियों के लिए हानिकारक है।"
+    const illusionNote = input.satisfactoryIllusionAlert
+      ? "पैमाना नोट: स्थानीय सीपीसीबी सूचकांक इसे सामान्य श्रेणी में दिखाता है, परंतु संशोधित यूएस ईपीए मानकों के अनुसार यह संवेदनशील वर्गों के लिए अस्वास्थ्यकर है; बाहरी गतिविधि हल्की रखें और इनडोर फिल्ट्रेशन का उपयोग करें।"
       : "";
 
     const fireWarning =
@@ -135,8 +137,8 @@ export function generateDeterministicFallback(input: AdvisorMetricsInput): Advis
       ],
       familyBriefing:
         `वायु गुणवत्ता सूचकांक वर्तमान में ${input.cpcbAqi} (${safeCategory}) है। ` +
-        `${safeArchetype} के लिए विशेष सावधानी आवश्यक है। दोपहर के स्वच्छतम समय (${safeCleanWindow}, अनुमानित ${input.cleanestWindowPm25} µg/m³) को प्राथमिकता दें। ` +
-        `सुबह और रात के अत्यधिक प्रदूषित समय (${safeWorstWindow}, ${input.worstWindowPm25} µg/m³) में बाहर जाने से बचें। ${illusionWarning} ${fireWarning}`.trim(),
+        `${safeArchetype} के लिए विशेष सावधानी आवश्यक है। सबसे स्वच्छ समय (${safeCleanWindow}, अनुमानित ${input.cleanestWindowPm25} µg/m³) को प्राथमिकता दें। ` +
+        `अत्यधिक प्रदूषित समय (${safeWorstWindow}, ${input.worstWindowPm25} µg/m³) में बाहर जाने से बचें। ${illusionNote} ${fireWarning}`.trim(),
       rwaNoticeHeadline: `आरडब्ल्यूए एडवाइजरी: ग्रेप ${safeGrapName} वायु प्रदूषण प्रतिबंध लागू`,
       rwaNoticeBody:
         `सभी निवासियों को सूचित किया जाता है कि दिल्ली-एनसीआर में सीपीसीबी सूचकांक ${input.cpcbAqi} दर्ज हुआ है। ` +
@@ -146,7 +148,7 @@ export function generateDeterministicFallback(input: AdvisorMetricsInput): Advis
   }
 
   const illusionText = input.satisfactoryIllusionAlert
-    ? "ALERT: Local CPCB scale rates conditions benignly, but revised US EPA standards classify this level as Unhealthy for Sensitive Groups. Precautionary isolation is recommended."
+    ? "Scale Note: Local CPCB scale rates conditions mildly, while revised US EPA 2024 standards classify this PM2.5 level as Unhealthy for Sensitive Groups. Gentler outdoor pacing and indoor filtration are recommended."
     : "";
 
   const fireText =
@@ -162,8 +164,8 @@ export function generateDeterministicFallback(input: AdvisorMetricsInput): Advis
     ],
     familyBriefing:
       `Current CPCB AQI is ${input.cpcbAqi} (${safeCategory}). ` +
-      `Protection protocol active for ${safeArchetype}: restrict outdoor exertion during morning peak hours (${safeWorstWindow}, ${input.worstWindowPm25} µg/m³). ` +
-      `Shift mandatory ventilation or walking to the cleanest afternoon window (${safeCleanWindow}, ${input.cleanestWindowPm25} µg/m³). ` +
+      `Protection protocol active for ${safeArchetype}: restrict outdoor exertion during peak hours (${safeWorstWindow}, ${input.worstWindowPm25} µg/m³). ` +
+      `Shift mandatory ventilation or walking to the cleanest window (${safeCleanWindow}, ${input.cleanestWindowPm25} µg/m³). ` +
       `${illusionText} ${fireText}`.trim(),
     rwaNoticeHeadline: `RWA NOTICE: GRAP ${safeGrapName} MANDATE ENFORCED`,
     rwaNoticeBody:
@@ -191,13 +193,60 @@ export function containsNumericDigits(obj: unknown): boolean {
   return false;
 }
 
+function describeWindowPeriod(windowTime: string): string {
+  const hourMatch = /^(\d{2}):/.exec(windowTime.trim());
+  if (!hourMatch?.[1]) return "daytime";
+  const hour = Number.parseInt(hourMatch[1], 10);
+  if (hour >= 4 && hour < 9) return "early morning inversion";
+  if (hour >= 9 && hour < 12) return "late morning";
+  if (hour >= 12 && hour < 17) return "afternoon solar mixing";
+  if (hour >= 17 && hour < 21) return "evening transition";
+  return "nocturnal inversion";
+}
+
+function buildAdvisorCacheKey(input: AdvisorMetricsInput): string {
+  return [
+    "adv",
+    input.cpcbCategory,
+    input.usEpaCategory,
+    input.satisfactoryIllusionAlert ? "1" : "0",
+    input.grapStageId,
+    input.archetype,
+    input.upwindFireAlignment,
+    input.language,
+    describeWindowPeriod(input.cleanestWindowTime),
+    describeWindowPeriod(input.worstWindowTime),
+  ].join(":");
+}
+
+const genAiClientPool = new Map<string, GoogleGenAI>();
+
+function getGenAiClient(apiKey: string): GoogleGenAI {
+  const existing = genAiClientPool.get(apiKey);
+  if (existing) {
+    return existing;
+  }
+  if (genAiClientPool.size >= 8) {
+    const oldestKey = genAiClientPool.keys().next().value;
+    if (oldestKey !== undefined) {
+      genAiClientPool.delete(oldestKey);
+    }
+  }
+  const client = new GoogleGenAI({ apiKey });
+  genAiClientPool.set(apiKey, client);
+  return client;
+}
+
 function buildAdvisorInputContext(input: AdvisorMetricsInput): string {
+  const cleanestCue = describeWindowPeriod(input.cleanestWindowTime);
+  const worstCue = describeWindowPeriod(input.worstWindowTime);
+
   return (
     `CURRENT CERTIFIED ENVIRONMENTAL STATUS:\n` +
     `- Local CPCB Classification: ${sanitizePromptText(input.cpcbCategory)}\n` +
     `- International US EPA Classification: ${sanitizePromptText(input.usEpaCategory)}\n` +
-    `- Satisfactory Illusion Alert: ${input.satisfactoryIllusionAlert ? "ACTIVE (Health risk obscured by local scale)" : "INACTIVE"}\n` +
-    `- Diurnal Window Advice: Shift outdoor exposure from morning/nocturnal peak to afternoon solar ventilation window\n` +
+    `- Scale Difference Note: ${input.satisfactoryIllusionAlert ? "ACTIVE (International thresholds stricter than local classification)" : "INACTIVE"}\n` +
+    `- Diurnal Window Advice: Shift outdoor activity from ${worstCue} peak to ${cleanestCue} cleanest window\n` +
     `- Delhi-NCR GRAP Stage: ${sanitizePromptText(input.grapStageName)}\n` +
     `- Vulnerable Family Member: ${sanitizePromptText(input.archetypeLabel)}\n` +
     `- Regional Biomass Plume Alignment: ${input.upwindFireAlignment}\n` +
@@ -213,7 +262,7 @@ const defaultInteractionRunner: AdvisorInteractionRunner = async ({
   timeoutMs,
   signal,
 }) => {
-  const ai = new GoogleGenAI({ apiKey });
+  const ai = getGenAiClient(apiKey);
   const interaction = await ai.interactions.create(
     {
       model,
@@ -307,6 +356,22 @@ export async function generateAdvisorBriefing(
     };
   }
 
+  const canUseCache =
+    options.interactionRunner === undefined &&
+    options.customApiKey === undefined &&
+    options.modelOverride === undefined;
+  const cacheKey = canUseCache ? buildAdvisorCacheKey(input) : null;
+
+  if (cacheKey) {
+    const cached = globalAdvisorCache.get(cacheKey);
+    if (cached && !cached.isFallback) {
+      return {
+        ...cached,
+        executionDurationMs: Date.now() - startTime,
+      };
+    }
+  }
+
   const breaker = getCircuitBreaker("gemini");
   if (!breaker.canAttempt()) {
     recordUpstreamMetric("gemini", false, 0);
@@ -353,7 +418,7 @@ export async function generateAdvisorBriefing(
     try {
       parsedJson = JSON.parse(rawText);
     } catch {
-      breaker.recordSuccess();
+      breaker.recordFailure();
       recordUpstreamMetric("gemini", false, Date.now() - startTime);
       return {
         output: generateDeterministicFallback(input),
@@ -365,7 +430,7 @@ export async function generateAdvisorBriefing(
 
     const zodResult = AdvisorOutputSchema.safeParse(parsedJson);
     if (!zodResult.success) {
-      breaker.recordSuccess();
+      breaker.recordFailure();
       recordUpstreamMetric("gemini", false, Date.now() - startTime);
       return {
         output: generateDeterministicFallback(input),
@@ -376,7 +441,7 @@ export async function generateAdvisorBriefing(
     }
 
     if (containsNumericDigits(zodResult.data)) {
-      breaker.recordSuccess();
+      breaker.recordFailure();
       recordUpstreamMetric("gemini", false, Date.now() - startTime);
       return {
         output: generateDeterministicFallback(input),
@@ -389,11 +454,15 @@ export async function generateAdvisorBriefing(
 
     breaker.recordSuccess();
     recordUpstreamMetric("gemini", true, Date.now() - startTime);
-    return {
+    const successResult: AdvisorExecutionResult = {
       output: zodResult.data,
       isFallback: false,
       executionDurationMs: Date.now() - startTime,
     };
+    if (cacheKey) {
+      globalAdvisorCache.set(cacheKey, successResult, CACHE_TTL_MS.ADVISOR);
+    }
+    return successResult;
   } catch (error: unknown) {
     clearTimeout(timeoutId);
     breaker.recordFailure();

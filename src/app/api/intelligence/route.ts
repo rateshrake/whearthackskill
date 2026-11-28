@@ -8,13 +8,23 @@ import {
 } from "@/services";
 import { HOUSEHOLD_ARCHETYPES, mapAqiToGrapStage } from "@/engine";
 
-function formatWindowTimeUtc(
+const IST_TIME_FORMATTER = new Intl.DateTimeFormat("en-GB", {
+  timeZone: "Asia/Kolkata",
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+});
+
+function formatWindowTimeIst(
   startIso: string | undefined,
   endIso: string | undefined,
   fallbackRange: string,
 ): string {
   if (!startIso || !endIso) return fallbackRange;
-  return `${startIso.slice(11, 16)} - ${endIso.slice(11, 16)} UTC`;
+  const startMs = Date.parse(startIso);
+  const endMs = Date.parse(endIso);
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) return fallbackRange;
+  return `${IST_TIME_FORMATTER.format(startMs)} - ${IST_TIME_FORMATTER.format(endMs)} IST`;
 }
 
 export async function GET(request: NextRequest) {
@@ -54,16 +64,16 @@ export async function GET(request: NextRequest) {
         usEpaAqi: payload.currentConditions.usEpa.aqi,
         usEpaCategory: payload.currentConditions.usEpa.category,
         satisfactoryIllusionAlert: payload.currentConditions.satisfactoryIllusionAlert,
-        cleanestWindowTime: formatWindowTimeUtc(
+        cleanestWindowTime: formatWindowTimeIst(
           payload.diurnalAnalysis.cleanestToday?.startTimeIso,
           payload.diurnalAnalysis.cleanestToday?.endTimeIso,
-          "14:00 - 16:00 UTC",
+          "14:00 - 16:00 IST",
         ),
         cleanestWindowPm25: payload.diurnalAnalysis.cleanestToday?.averagePm25 ?? 55.0,
-        worstWindowTime: formatWindowTimeUtc(
+        worstWindowTime: formatWindowTimeIst(
           payload.diurnalAnalysis.worstToday?.startTimeIso,
           payload.diurnalAnalysis.worstToday?.endTimeIso,
-          "06:00 - 08:00 UTC",
+          "06:00 - 08:00 IST",
         ),
         worstWindowPm25: payload.diurnalAnalysis.worstToday?.averagePm25 ?? 220.0,
         grapStageId: grapStage.stage,

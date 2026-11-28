@@ -50,27 +50,37 @@ export function buildDocumentCsp(nonce: string, isDev = false): string {
   const scriptSrc = isDev
     ? `script-src 'self' 'unsafe-eval' 'unsafe-inline'`
     : `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'`;
+  const styleSrc = isDev ? "style-src 'self' 'unsafe-inline'" : "style-src 'self'";
   const connectSrc = isDev ? "connect-src 'self' ws: wss:" : "connect-src 'self'";
 
   return [
     "default-src 'self'",
     scriptSrc,
-    "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: https:",
+    styleSrc,
+    "img-src 'self' data:",
     "font-src 'self' data:",
     connectSrc,
     "object-src 'none'",
     "base-uri 'none'",
     "form-action 'self'",
     "frame-ancestors 'none'",
+    "worker-src 'none'",
+    "media-src 'none'",
+    "manifest-src 'self'",
   ].join("; ");
 }
 
 /**
  * Injects security headers onto any outgoing HTML or generic Response object.
  */
-export function applySecurityHeaders(response: Response): Response {
-  for (const [header, val] of Object.entries(SECURITY_HEADERS)) {
+export function applySecurityHeaders<T extends Response>(
+  response: T,
+  extraHeaders?: Record<string, string>,
+): T {
+  const headersToApply = extraHeaders
+    ? { ...BASE_SECURITY_HEADERS, ...extraHeaders }
+    : SECURITY_HEADERS;
+  for (const [header, val] of Object.entries(headersToApply)) {
     response.headers.set(header, val);
   }
   return response;

@@ -5,14 +5,14 @@
  * Upwind fire alignment via NASA FIRMS (VIIRS SNPP NRT) + Open-Meteo wind vectors.
  */
 
-import { CACHE_TTL_MS, globalFirmsCache } from "../gridCache";
-import { fetchWithResilience } from "../resilientHttp";
+import { CACHE_TTL_MS, globalFirmsCache, quantizeCoordinates } from "../gridCache";
+import { fetchWithResilience, redactSecrets } from "../resilientHttp";
 import {
   calculateAngleDifference,
   calculateBearingDegrees,
   calculateHaversineDistanceKm,
 } from "./geoMath";
-import { MANDATORY_ATTRIBUTIONS } from "../airQualityAggregator";
+import { DEFAULT_REGIONAL_WIND, MANDATORY_ATTRIBUTIONS } from "../attributions";
 
 export type UpwindAlignment = "upwind_aligned" | "crosswind" | "none_detected";
 
@@ -64,15 +64,6 @@ function parseFirmsCsvPoints(csvText: string): Array<{ lat: number; lon: number 
   return firePoints;
 }
 
-function isCachedFireResult(value: unknown): value is UpwindFireQueryResult {
-  return (
-    value !== null &&
-    typeof value === "object" &&
-    "context" in value &&
-    "firmsSource" in value
-  );
-}
-
 /**
  * Fetches wind vector and regional NASA FIRMS anomalies with explicit source provenance.
  */
@@ -80,14 +71,14 @@ export async function fetchUpwindFireContextWithProvenance(
   lat: number,
   lon: number,
 ): Promise<UpwindFireQueryResult> {
-  const cacheKey = `firms:${lat.toFixed(2)},${lon.toFixed(2)}`;
+  const { gridKey: cacheKey } = quantizeCoordinates(lat, lon, "firms");
   const cached = globalFirmsCache.get(cacheKey);
-  if (isCachedFireResult(cached)) {
+  if (cached) {
     return cached;
   }
 
-  let windSpeedKmh = 12.0;
-  let windDirectionDeg = 315.0; // Default NW winter corridor
+  let windSpeedKmh: number = DEFAULT_REGIONAL_WIND.speedKmh;
+  let windDirectionDeg: number = DEFAULT_REGIONAL_WIND.directionDeg;
 
   try {
     const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=wind_speed_10m,wind_direction_10m`;
@@ -118,8 +109,11 @@ export async function fetchUpwindFireContextWithProvenance(
         }
       }
     }
-  } catch {
-    // Continue with default regional wind vector
+  } catch (err: unknown) {
+    console.warn(
+      "[upwindFire] Open-Meteo wind lookup failed, using regional default:",
+      redactSecrets(err instanceof Error ? err.message : String(err)),
+    );
   }
 
   const firmsMapKey = process.env.NASA_FIRMS_MAP_KEY;
@@ -182,7 +176,11 @@ export async function fetchUpwindFireContextWithProvenance(
           }
         }
       }
-    } catch {
+    } catch (err: unknown) {
+      console.warn(
+        "[upwindFire] NASA FIRMS lookup failed:",
+        redactSecrets(err instanceof Error ? err.message : String(err)),
+      );
       firmsSource = "none";
     }
   }

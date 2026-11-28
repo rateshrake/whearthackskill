@@ -19,6 +19,7 @@ import {
 } from "@/engine";
 import { quantizeCoordinates, globalForecastCache, CACHE_TTL_MS } from "./gridCache";
 import {
+  buildDeterministicDiurnalCurve,
   fetchPrimaryAirQuality,
   type PrimaryAqiFetchResult,
 } from "./providers/primaryAirQuality";
@@ -39,6 +40,8 @@ import {
   calculateBearingDegrees,
   calculateHaversineDistanceKm,
 } from "./providers/geoMath";
+import { DEFAULT_REGIONAL_WIND, MANDATORY_ATTRIBUTIONS } from "./attributions";
+import { redactSecrets } from "./resilientHttp";
 
 export {
   calculateAngleDifference,
@@ -47,6 +50,7 @@ export {
   fetchGroundStationData,
   fetchPrimaryAirQuality,
   fetchUpwindFireContext,
+  MANDATORY_ATTRIBUTIONS,
 };
 export type { GroundStationCheck, UpwindAlignment, UpwindFireContext };
 
@@ -92,17 +96,6 @@ export interface AirIntelligencePayload {
   mandatoryAttributions: string[];
 }
 
-export const MANDATORY_ATTRIBUTIONS = {
-  OPEN_METEO_CAMS:
-    "Air quality forecast provided by Open-Meteo (CAMS / Copernicus Atmosphere Monitoring Service, European Union, licensed under CC BY 4.0).",
-  WAQI: "Ground station observations provided by World Air Quality Index Project (WAQI / AQICN) and originating national/state environmental monitoring agency (e.g. CPCB / DPCC).",
-  OPENAQ: "Ground station reference data provided by OpenAQ Community (OpenAQ v3 API).",
-  NASA_FIRMS:
-    "Active fire hotspot observations provided by NASA FIRMS (VIIRS SNPP NRT / EOSDIS, NASA Earth Science Data).",
-  GOOGLE_MAPS:
-    "Air quality index and localized condition mapping courtesy of Google Maps Platform Air Quality API.",
-} as const;
-
 const inFlightAggregations = new Map<string, Promise<AirIntelligencePayload>>();
 
 async function executeAggregation(
@@ -118,27 +111,32 @@ async function executeAggregation(
   ]);
 
   let primaryData: PrimaryAqiFetchResult;
+  let primaryIsFallback = false;
   if (primarySettled.status === "fulfilled") {
     primaryData = primarySettled.value;
   } else {
+    primaryIsFallback = true;
+    console.warn(
+      "[airQualityAggregator] All primary air quality providers failed; using 48h deterministic fallback:",
+      redactSecrets(
+        primarySettled.reason instanceof Error
+          ? primarySettled.reason.message
+          : String(primarySettled.reason),
+      ),
+    );
+    const fallbackPm25 = 95.0;
+    const fallbackPm10 = 175.0;
     primaryData = {
       source: "open_meteo",
       current: {
-        pm25: 95.0,
-        pm10: 175.0,
+        pm25: fallbackPm25,
+        pm10: fallbackPm10,
         no2: 45.0,
         o3: 32.0,
         so2: 14.0,
         co: 1.5,
       },
-      forecastObservations: [
-        {
-          timestampIso: new Date().toISOString(),
-          pm25: 95.0,
-          pm10: 175.0,
-          humidityPct: 65,
-        },
-      ],
+      forecastObservations: buildDeterministicDiurnalCurve(fallbackPm25, fallbackPm10),
     };
   }
 
@@ -154,8 +152,8 @@ async function executeAggregation(
           context: {
             fireHotspotCount: 0,
             nearestFireKm: null,
-            windSpeedKmh: 10.0,
-            windDirectionDeg: 315.0,
+            windSpeedKmh: DEFAULT_REGIONAL_WIND.speedKmh,
+            windDirectionDeg: DEFAULT_REGIONAL_WIND.directionDeg,
             alignment: "none_detected" as const,
             scientificDisclaimer:
               "Upwind thermal anomaly monitoring currently unavailable.",
@@ -174,7 +172,7 @@ async function executeAggregation(
   });
 
   const usEpaAqiResult = calculateUsEpa2024Pm25Aqi(primaryData.current.pm25);
-  const scaleComparison = compareAqiScales(primaryData.current.pm25);
+  const scaleComparison = compareAqiScales(primaryData.current, cpcbAqiResult);
 
   const diurnalResult = computeRollingDiurnalWindows(primaryData.forecastObservations, {
     applyHumidityCorrection: true,
@@ -228,7 +226,9 @@ async function executeAggregation(
     mandatoryAttributions,
   };
 
-  globalForecastCache.set(gridKey, payload, CACHE_TTL_MS.FORECAST);
+  if (!primaryIsFallback) {
+    globalForecastCache.set(gridKey, payload, CACHE_TTL_MS.FORECAST);
+  }
   return payload;
 }
 
@@ -242,8 +242,7 @@ export async function aggregateAirIntelligence(
 ): Promise<AirIntelligencePayload> {
   const { lat, lon, gridKey } = quantizeCoordinates(rawLat, rawLon, "agg");
 
-  const cachedPayload = globalForecastCache.get(gridKey) as
-    AirIntelligencePayload | undefined;
+  const cachedPayload = globalForecastCache.get(gridKey);
   if (cachedPayload) {
     return {
       ...cachedPayload,

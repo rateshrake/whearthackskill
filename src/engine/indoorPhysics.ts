@@ -174,7 +174,7 @@ export function calculateRoomVolume(dims: RoomDimensions): number {
     dims.widthMeters <= 0 ||
     dims.heightMeters <= 0
   ) {
-    throw new Error("Room dimensions must be positive non-zero numbers.");
+    throw new RangeError("Room dimensions must be positive non-zero numbers.");
   }
   return Number((dims.lengthMeters * dims.widthMeters * dims.heightMeters).toFixed(2));
 }

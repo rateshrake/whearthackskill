@@ -25,7 +25,7 @@ describe("Module 3: indoorPhysics", () => {
     it("should throw error on non-positive room dimensions", () => {
       expect(() =>
         calculateRoomVolume({ lengthMeters: 0, widthMeters: 4, heightMeters: 3 }),
-      ).toThrow("Room dimensions must be positive non-zero numbers.");
+      ).toThrow(RangeError);
 
       expect(() =>
         calculateRoomVolume({ lengthMeters: 5, widthMeters: -2, heightMeters: 3 }),

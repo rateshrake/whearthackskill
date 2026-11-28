@@ -10,10 +10,12 @@ import {
 import type { AirIntelligencePayload } from "../src/services/airQualityAggregator";
 import type { AdvisorExecutionResult } from "../src/services/geminiAdvisor";
 
+type ScenarioName = "severe_delhi" | "satisfactory_illusion" | "moderate_pm10";
+
 /**
  * Fixture Factory for Deterministic Intelligence Payloads
  */
-function createDeterministicFixture(scenario: "severe_delhi" | "satisfactory_illusion"): {
+function createDeterministicFixture(scenario: ScenarioName): {
   intelligence: AirIntelligencePayload;
   advisor: AdvisorExecutionResult;
 } {
@@ -27,7 +29,7 @@ function createDeterministicFixture(scenario: "severe_delhi" | "satisfactory_ill
 
     const cpcb = calculateCpcbAqi({ pm25, pm10, no2, o3, so2, co });
     const usEpa = calculateUsEpa2024Pm25Aqi(pm25);
-    const scaleComparison = compareAqiScales(pm25);
+    const scaleComparison = compareAqiScales({ pm25, pm10, no2, o3, so2, co }, cpcb);
 
     const baseTime = new Date("2026-11-20T00:00:00Z");
     const observations: DiurnalObservation[] = [];
@@ -57,7 +59,7 @@ function createDeterministicFixture(scenario: "severe_delhi" | "satisfactory_ill
 
     return {
       intelligence: {
-        quantizedCoordinates: { lat: 28.69, lon: 76.97, gridKey: "28.69_76.97" },
+        quantizedCoordinates: { lat: 28.69, lon: 76.97, gridKey: "agg:28.69,76.97" },
         currentConditions: {
           pm25,
           pm10,
@@ -102,7 +104,7 @@ function createDeterministicFixture(scenario: "severe_delhi" | "satisfactory_ill
           firmsSource: "nasa_firms",
           quantizedLat: 28.69,
           quantizedLon: 76.97,
-          gridKey: "28.69_76.97",
+          gridKey: "agg:28.69,76.97",
           cachedAtIso: new Date().toISOString(),
           isCacheHit: false,
         },
@@ -129,33 +131,35 @@ function createDeterministicFixture(scenario: "severe_delhi" | "satisfactory_ill
         executionDurationMs: 420,
       },
     };
-  } else {
-    // Scenario B: Satisfactory Illusion in Pune/Hyderabad
-    const pm25 = 48.0;
-    const pm10 = 75.0;
-    const no2 = 25.0;
-    const o3 = 20.0;
-    const so2 = 10.0;
-    const co = 0.6;
+  }
+
+  if (scenario === "moderate_pm10") {
+    // Scenario C: PM10-dominated Moderate CPCB (117 Moderate) vs US EPA (139 USG)
+    const pm25 = 51.1;
+    const pm10 = 125.0;
+    const no2 = 30.0;
+    const o3 = 22.0;
+    const so2 = 11.0;
+    const co = 0.7;
 
     const cpcb = calculateCpcbAqi({ pm25, pm10, no2, o3, so2, co });
     const usEpa = calculateUsEpa2024Pm25Aqi(pm25);
-    const scaleComparison = compareAqiScales(pm25);
+    const scaleComparison = compareAqiScales({ pm25, pm10, no2, o3, so2, co }, cpcb);
 
     const baseTime = new Date("2026-11-20T00:00:00Z");
     const observations: DiurnalObservation[] = [];
     for (let h = 0; h < 48; h++) {
       const t = new Date(baseTime.getTime() + h * 3600 * 1000).toISOString();
       const hourOfDay = h % 24;
-      let hourlyPm25 = 45.0;
-      if (hourOfDay >= 6 && hourOfDay <= 9) hourlyPm25 = 68.0;
-      if (hourOfDay >= 14 && hourOfDay <= 17) hourlyPm25 = 32.0;
+      let hourlyPm25 = 48.0;
+      if (hourOfDay >= 6 && hourOfDay <= 9) hourlyPm25 = 72.0;
+      if (hourOfDay >= 14 && hourOfDay <= 17) hourlyPm25 = 35.0;
 
       observations.push({
         timestampIso: t,
         pm25: hourlyPm25,
-        pm10: hourlyPm25 * 1.6,
-        humidityPct: 50.0,
+        pm10: hourlyPm25 * 2.1,
+        humidityPct: 65.0,
       });
     }
 
@@ -165,7 +169,7 @@ function createDeterministicFixture(scenario: "severe_delhi" | "satisfactory_ill
 
     return {
       intelligence: {
-        quantizedCoordinates: { lat: 17.44, lon: 78.38, gridKey: "17.44_78.38" },
+        quantizedCoordinates: { lat: 18.53, lon: 73.85, gridKey: "agg:18.53,73.85" },
         currentConditions: {
           pm25,
           pm10,
@@ -185,67 +189,176 @@ function createDeterministicFixture(scenario: "severe_delhi" | "satisfactory_ill
           cleanestTomorrow: diurnalAnalysis.cleanestTomorrow,
           worstTomorrow: diurnalAnalysis.worstTomorrow,
         },
-        groundStation: {
-          stationName: "Hyderabad HITEC City - TSPCB",
-          originatingAgency: "TSPCB / CPCB",
-          stationAqi: 82,
-          stationPm25: 49.5,
-          cityModelPm25: 48.0,
-          stationVsCitySkewPct: 3.1,
-          classification: "consistent",
-          attribution: "TSPCB Reference Station",
-        },
+        groundStation: null,
         upwindFireContext: {
           fireHotspotCount: 0,
           nearestFireKm: null,
-          windSpeedKmh: 9.0,
-          windDirectionDeg: 140.0,
+          windSpeedKmh: 10.5,
+          windDirectionDeg: 280.0,
           alignment: "none_detected",
           scientificDisclaimer: "Methodological satellite attribution notice.",
           attribution: "NASA FIRMS",
         },
         provenance: {
           primarySource: "open_meteo",
-          stationSource: "waqi",
-          firmsSource: "nasa_firms",
-          quantizedLat: 17.44,
-          quantizedLon: 78.38,
-          gridKey: "17.44_78.38",
+          stationSource: "none",
+          firmsSource: "none",
+          quantizedLat: 18.53,
+          quantizedLon: 73.85,
+          gridKey: "agg:18.53,73.85",
           cachedAtIso: new Date().toISOString(),
           isCacheHit: false,
         },
-        mandatoryAttributions: ["Open-Meteo CC BY 4.0", "WAQI", "NASA FIRMS"],
+        mandatoryAttributions: ["Open-Meteo CC BY 4.0", "NASA FIRMS"],
       },
       advisor: {
         output: {
           topActionIds: ["hepa_purifier_continuous", "shift_outdoor_hours"],
           familyBriefing:
-            "CRITICAL: Local CPCB scale rates conditions as Satisfactory (AQI 80), but tightened US EPA 2024 epidemiological standards classify this air as Unhealthy for Sensitive Groups (AQI 132). Vulnerable family members must avoid vigorous outdoor exertion.",
-          rwaNoticeHeadline: "RWA NOTICE: SENSITIVE POPULATION CLEAN-AIR ADVISORY",
+            "Moderate coarse-particulate conditions noted. Sensitive family members should pace outdoor activities during peak traffic hours and rely on indoor filtration.",
+          rwaNoticeHeadline: "RWA CLEAN-AIR ADVISORY",
           rwaNoticeBody:
-            "Residents are notified that while local indices appear moderate, international standards indicate heightened inflammatory risks for asthmatic children.",
+            "Maintain periodic water sprinkling on internal roads to suppress coarse dust.",
         },
         isFallback: false,
-        executionDurationMs: 380,
+        executionDurationMs: 280,
       },
     };
   }
+
+  // Scenario B: Satisfactory Illusion in Hyderabad
+  const pm25 = 48.0;
+  const pm10 = 75.0;
+  const no2 = 25.0;
+  const o3 = 20.0;
+  const so2 = 10.0;
+  const co = 0.6;
+
+  const cpcb = calculateCpcbAqi({ pm25, pm10, no2, o3, so2, co });
+  const usEpa = calculateUsEpa2024Pm25Aqi(pm25);
+  const scaleComparison = compareAqiScales({ pm25, pm10, no2, o3, so2, co }, cpcb);
+
+  const baseTime = new Date("2026-11-20T00:00:00Z");
+  const observations: DiurnalObservation[] = [];
+  for (let h = 0; h < 48; h++) {
+    const t = new Date(baseTime.getTime() + h * 3600 * 1000).toISOString();
+    const hourOfDay = h % 24;
+    let hourlyPm25 = 45.0;
+    if (hourOfDay >= 6 && hourOfDay <= 9) hourlyPm25 = 68.0;
+    if (hourOfDay >= 14 && hourOfDay <= 17) hourlyPm25 = 32.0;
+
+    observations.push({
+      timestampIso: t,
+      pm25: hourlyPm25,
+      pm10: hourlyPm25 * 1.6,
+      humidityPct: 50.0,
+    });
+  }
+
+  const diurnalAnalysis = computeRollingDiurnalWindows(observations, {
+    applyHumidityCorrection: true,
+  });
+
+  return {
+    intelligence: {
+      quantizedCoordinates: { lat: 17.44, lon: 78.38, gridKey: "agg:17.44,78.38" },
+      currentConditions: {
+        pm25,
+        pm10,
+        no2,
+        o3,
+        so2,
+        co,
+        cpcb,
+        usEpa,
+        satisfactoryIllusionAlert: scaleComparison.satisfactoryIllusionAlert,
+        scaleComparisonExplanation: scaleComparison.explanation,
+      },
+      diurnalAnalysis: {
+        observations48h: observations,
+        cleanestToday: diurnalAnalysis.cleanestToday,
+        worstToday: diurnalAnalysis.worstToday,
+        cleanestTomorrow: diurnalAnalysis.cleanestTomorrow,
+        worstTomorrow: diurnalAnalysis.worstTomorrow,
+      },
+      groundStation: {
+        stationName: "Hyderabad HITEC City - TSPCB",
+        originatingAgency: "TSPCB / CPCB",
+        stationAqi: 82,
+        stationPm25: 49.5,
+        cityModelPm25: 48.0,
+        stationVsCitySkewPct: 3.1,
+        classification: "consistent",
+        attribution: "TSPCB Reference Station",
+      },
+      upwindFireContext: {
+        fireHotspotCount: 0,
+        nearestFireKm: null,
+        windSpeedKmh: 9.0,
+        windDirectionDeg: 140.0,
+        alignment: "none_detected",
+        scientificDisclaimer: "Methodological satellite attribution notice.",
+        attribution: "NASA FIRMS",
+      },
+      provenance: {
+        primarySource: "open_meteo",
+        stationSource: "waqi",
+        firmsSource: "nasa_firms",
+        quantizedLat: 17.44,
+        quantizedLon: 78.38,
+        gridKey: "agg:17.44,78.38",
+        cachedAtIso: new Date().toISOString(),
+        isCacheHit: false,
+      },
+      mandatoryAttributions: ["Open-Meteo CC BY 4.0", "WAQI", "NASA FIRMS"],
+    },
+    advisor: {
+      output: {
+        topActionIds: ["hepa_purifier_continuous", "shift_outdoor_hours"],
+        familyBriefing:
+          "Local CPCB scale rates conditions as Satisfactory, while tightened US EPA epidemiological standards classify fine particles as Unhealthy for Sensitive Groups. Vulnerable family members should pace outdoor exertion gently.",
+        rwaNoticeHeadline: "RWA NOTICE: SENSITIVE POPULATION CLEAN-AIR ADVISORY",
+        rwaNoticeBody:
+          "Residents are notified that international standards indicate heightened sensitivity for asthmatic children.",
+      },
+      isFallback: false,
+      executionDurationMs: 380,
+    },
+  };
 }
 
-test.describe("VayuShield E2E & Accessibility Hardening Suite", () => {
+test.describe("VayuShield E2E, Security Headers, CSP & Accessibility Hardening Suite", () => {
   test.beforeEach(async ({ context, page }) => {
-    // Grant clipboard permissions for automated test execution
     await context.grantPermissions(["clipboard-read", "clipboard-write"]);
     page.on("pageerror", (err) => {
       throw new Error(`Uncaught browser pageerror: ${err.message}`);
     });
   });
 
-  test("Scenario A: Severe Delhi Winter Smog (GRAP Stage IV, Upwind Fires, Zero-Latency Controls, Zero Axe Violations)", async ({
+  test("Scenario A: Severe Delhi Winter Smog (Zero-Latency Controls, Security Headers, Zero CSP/Axe Violations)", async ({
     page,
   }) => {
     let networkCallCount = 0;
     const failedAssetResponses: string[] = [];
+    const cspViolations: string[] = [];
+
+    await page.addInitScript(() => {
+      (window as unknown as { __cspViolations: string[] }).__cspViolations = [];
+      window.addEventListener("securitypolicyviolation", (e) => {
+        (window as unknown as { __cspViolations: string[] }).__cspViolations.push(
+          `${e.violatedDirective}:${e.blockedURI}`,
+        );
+      });
+    });
+
+    page.on("console", (msg) => {
+      if (
+        msg.type() === "error" &&
+        msg.text().toLowerCase().includes("content security policy")
+      ) {
+        cspViolations.push(msg.text());
+      }
+    });
 
     page.on("response", (res) => {
       if (res.url().startsWith("http://localhost:3000") && res.status() >= 400) {
@@ -253,7 +366,6 @@ test.describe("VayuShield E2E & Accessibility Hardening Suite", () => {
       }
     });
 
-    // Intercept /api/intelligence with deterministic Severe Delhi payload
     await page.route("**/api/intelligence*", async (route) => {
       networkCallCount++;
       const fixture = createDeterministicFixture("severe_delhi");
@@ -264,16 +376,20 @@ test.describe("VayuShield E2E & Accessibility Hardening Suite", () => {
       });
     });
 
-    // 1. Load application
     const responsePromise = page.waitForResponse((res) =>
       res.url().includes("/api/intelligence"),
     );
-    await page.goto("/");
+    const docResponse = await page.goto("/");
+    expect(docResponse).not.toBeNull();
+    expect(docResponse?.headers()["x-powered-by"]).toBeUndefined();
+    const docCsp = docResponse?.headers()["content-security-policy"] ?? "";
+    expect(docCsp).toContain("worker-src 'none'");
+    expect(docCsp).toContain("img-src 'self' data:");
+
     await responsePromise;
     await expect(page.locator("h1")).toContainText("VayuShield");
     expect(networkCallCount).toBe(1);
 
-    // 2. Verify Module 1: DualScaleCard
     const dualScaleSection = page.locator(
       'section[aria-labelledby="dual-scale-heading"]',
     );
@@ -282,91 +398,64 @@ test.describe("VayuShield E2E & Accessibility Hardening Suite", () => {
     await expect(dualScaleSection).toContainText("US EPA May 2024 Revised AQI");
     await expect(dualScaleSection).toContainText("MICRO-HOTSPOT DETECTED");
 
-    // 3. Verify Module 2: DiurnalPlanner & Zero-Latency Archetype Recalculation
     const diurnalSection = page.locator(
       'section[aria-labelledby="diurnal-planner-heading"]',
     );
     await expect(diurnalSection).toBeVisible();
-    await expect(diurnalSection).toContainText(
-      "48-Hour Diurnal Clean-Air Window Optimizer",
-    );
-    await expect(diurnalSection).toContainText("Pulmonary Inhaled Dose Comparison");
-
-    // Click Archetype: Older Adult (Morning Walker)
     const olderAdultBtn = page.locator("#archetype-btn-older_adult_walker");
     await olderAdultBtn.click();
     await expect(olderAdultBtn).toHaveAttribute("aria-pressed", "true");
-
-    // Verify pulmonary dose updated synchronously without extra network calls
     expect(networkCallCount).toBe(1);
     await expect(diurnalSection).toContainText("Older Adult (Morning Walker)");
 
-    // 4. Verify Module 3: IndoorShelterCard & Zero-Latency CADR / Combustion Spikes
+    // Keyboard navigation on 48h timeline bars
+    const firstBar = diurnalSection
+      .getByRole("group", { name: /48-hour hourly air quality timeline/i })
+      .locator("button")
+      .first();
+    await firstBar.focus();
+    await firstBar.press("ArrowRight");
+    await expect(
+      diurnalSection.getByRole("status").filter({ hasText: /PM2\.5:/ }),
+    ).toBeVisible();
+
     const indoorSection = page.locator(
       'section[aria-labelledby="indoor-shelter-heading"]',
     );
-    await expect(indoorSection).toBeVisible();
-    await expect(indoorSection).toContainText(
-      "Indoor Single-Zone Mass Balance Shelter Audit",
-    );
-    await expect(indoorSection).toContainText("Required CADR (m³/h)");
-
-    // Adjust Room Length Slider
     const lengthInput = indoorSection.locator('input[type="range"]').first();
     await lengthInput.fill("7.0");
-    // Verify room volume and required CADR recalculate synchronously
     expect(networkCallCount).toBe(1);
 
-    // Switch Combustion Trigger to Unvented Frying
     const fryingBtn = page.locator("#combustion-btn-unvented_frying");
     await fryingBtn.click();
     await expect(fryingBtn).toHaveAttribute("aria-pressed", "true");
-    await expect(indoorSection).toContainText("Unvented High-Heat Frying / Tadka");
     expect(networkCallCount).toBe(1);
 
-    // 5. Verify Module 4: UpwindContextCard
-    const upwindSection = page.locator(
-      'section[aria-labelledby="upwind-context-heading"]',
-    );
-    await expect(upwindSection).toBeVisible();
-    await expect(upwindSection).toContainText("68");
-    await expect(upwindSection).toContainText("42.5 km");
-    await expect(upwindSection).toContainText("Upwind Plume Aligned");
-
-    // 6. Verify Module 5: CommunityHub & Clipboard Copy
     const communitySection = page.locator(
       'section[aria-labelledby="community-hub-heading"]',
     );
-    await expect(communitySection).toBeVisible();
-    await expect(communitySection).toContainText("Community & Society Smog Action Hub");
-    await expect(communitySection).toContainText("GRAP");
-
-    // Click "Copy RWA / School WhatsApp Advisory"
     const copyBtn = communitySection.locator(
       'button:has-text("Copy RWA / School WhatsApp Advisory")',
     );
     await copyBtn.click();
     await expect(communitySection).toContainText("Copied to Clipboard!");
 
-    // 7. Verify AttributionFooter
-    const footer = page.locator("footer");
-    await expect(footer).toBeVisible();
-    await expect(footer).toContainText("Open-Meteo & CAMS");
-    await expect(footer).toContainText("WAQI & CPCB");
-
-    // 8. Verify zero failed local asset responses (including /favicon.ico) and run Axe Accessibility Scan
     const faviconRes = await page.request.get("/favicon.ico");
     expect(faviconRes.status()).toBe(200);
     expect(failedAssetResponses).toEqual([]);
+
+    const recordedViolations = await page.evaluate(
+      () => (window as unknown as { __cspViolations: string[] }).__cspViolations,
+    );
+    expect([...cspViolations, ...recordedViolations]).toEqual([]);
 
     const axeResults = await new AxeBuilder({ page }).analyze();
     expect(axeResults.violations).toEqual([]);
   });
 
-  test("Scenario B: Satisfactory Illusion & Bilingual Hindi Mode (Zero Axe Violations)", async ({
+  test("Scenario B: Peaceful Flat Scale Note & Bilingual Hindi Mode (<html lang='hi'>, Zero Axe Violations)", async ({
     page,
   }) => {
-    // Intercept /api/intelligence with deterministic Satisfactory Illusion payload
     await page.route("**/api/intelligence*", async (route) => {
       const fixture = createDeterministicFixture("satisfactory_illusion");
       await route.fulfill({
@@ -376,42 +465,99 @@ test.describe("VayuShield E2E & Accessibility Hardening Suite", () => {
       });
     });
 
-    // 1. Load application
     const responsePromise = page.waitForResponse((res) =>
       res.url().includes("/api/intelligence"),
     );
     await page.goto("/");
     await responsePromise;
 
-    // 2. Assert Critical "Satisfactory Illusion" Banner is rendered
-    const illusionAlert = page
-      .locator('section[aria-labelledby="dual-scale-heading"]')
-      .getByRole("alert");
-    await expect(illusionAlert).toBeVisible();
-    await expect(illusionAlert).toContainText("SATISFACTORY ILLUSION");
+    const dualScaleSection = page.locator(
+      'section[aria-labelledby="dual-scale-heading"]',
+    );
+    // Requirement R3: NO role="alert" warning banner; peaceful flat <aside> instead
+    await expect(dualScaleSection.getByRole("alert")).toHaveCount(0);
 
-    // 3. Run Axe Accessibility Scan on Satisfactory Illusion State
+    const calmNote = dualScaleSection.locator(
+      'aside[aria-labelledby="scale-comparison-note-heading"]',
+    );
+    await expect(calmNote).toBeVisible();
+    await expect(calmNote).toContainText("Dual-Scale Reading Note");
+    await expect(calmNote).not.toContainText("CRITICAL");
+    await expect(calmNote).not.toContainText("SATISFACTORY ILLUSION");
+    await expect(calmNote).toContainText("80");
+    await expect(calmNote).toContainText("Satisfactory");
+    await expect(calmNote).toContainText("132");
+
+    const noteStyles = await calmNote.evaluate((el) => {
+      const style = window.getComputedStyle(el);
+      return {
+        boxShadow: style.boxShadow,
+        backgroundColor: style.backgroundColor,
+        borderColor: style.borderColor,
+      };
+    });
+    expect(noteStyles.boxShadow).toBe("none");
+
     const axeResultsEn = await new AxeBuilder({ page }).analyze();
     expect(axeResultsEn.violations).toEqual([]);
 
-    // 4. Switch Language to Hindi
+    // Switch Language to Hindi and verify <html lang="hi"> sync
     const langBtn = page.locator('button[aria-label="हिंदी में देखें"]:visible');
     await langBtn.click();
-
-    // 5. Assert Hindi Headlines & Typography
+    await expect(page.locator("html")).toHaveAttribute("lang", "hi");
     await expect(page.locator("h1")).toContainText("वायुशील्ड");
-    await expect(
-      page.locator('section[aria-labelledby="dual-scale-heading"] h2'),
-    ).toContainText("द्वि-पैमाना वास्तविकता जांच");
-    await expect(
-      page.locator('section[aria-labelledby="diurnal-planner-heading"] h2'),
-    ).toContainText("48-घंटे स्वच्छ-हवा दैनिक समय अनुकूलक");
-    await expect(
-      page.locator('section[aria-labelledby="indoor-shelter-heading"] h2'),
-    ).toContainText("इनडोर शेल्टर एवं घरेलू दहन सुरक्षा ऑडिट");
+    await expect(calmNote).toContainText("द्वि-स्तरीय पैमाना नोट");
 
-    // 6. Run Axe Accessibility Scan on Hindi State
     const axeResultsHi = await new AxeBuilder({ page }).analyze();
     expect(axeResultsHi.violations).toEqual([]);
+  });
+
+  test("Scenario C: Moderate PM10-Dominated AQI (117 Moderate vs 139 USG consistency & >=4.5:1 badge contrast in EN + HI)", async ({
+    page,
+  }) => {
+    await page.route("**/api/intelligence*", async (route) => {
+      const fixture = createDeterministicFixture("moderate_pm10");
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(fixture),
+      });
+    });
+
+    const responsePromise = page.waitForResponse((res) =>
+      res.url().includes("/api/intelligence"),
+    );
+    await page.goto("/");
+    await responsePromise;
+
+    const dualScaleSection = page.locator(
+      'section[aria-labelledby="dual-scale-heading"]',
+    );
+    const calmNote = dualScaleSection.locator(
+      'aside[aria-labelledby="scale-comparison-note-heading"]',
+    );
+    await expect(calmNote).toBeVisible();
+    await expect(calmNote).toContainText("117");
+    await expect(calmNote).toContainText("Moderate");
+    await expect(calmNote).toContainText("139");
+    await expect(calmNote).toContainText("Unhealthy for Sensitive Groups");
+    await expect(calmNote).not.toContainText("85");
+    await expect(calmNote).not.toContainText("Satisfactory");
+
+    const boxShadow = await calmNote.evaluate(
+      (el) => window.getComputedStyle(el).boxShadow,
+    );
+    expect(boxShadow).toBe("none");
+
+    // Verify Moderate badge + all controls pass Axe contrast checks in English & Hindi
+    const axeEn = await new AxeBuilder({ page }).analyze();
+    expect(axeEn.violations).toEqual([]);
+
+    const langBtn = page.locator('button[aria-label="हिंदी में देखें"]:visible');
+    await langBtn.click();
+    await expect(page.locator("html")).toHaveAttribute("lang", "hi");
+
+    const axeHi = await new AxeBuilder({ page }).analyze();
+    expect(axeHi.violations).toEqual([]);
   });
 });

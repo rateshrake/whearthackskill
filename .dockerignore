@@ -3,11 +3,8 @@
 .gitignore
 
 # Environment and Secret Files (Strictly excluded)
-.env
-.env*.local
-.env.development
-.env.test
-.env.production
+.env*
+!.env.example
 
 # Dependencies and caches
 node_modules

@@ -1,5 +1,8 @@
 import tsParser from "@typescript-eslint/parser";
 import tsPlugin from "@typescript-eslint/eslint-plugin";
+import nextPlugin from "@next/eslint-plugin-next";
+import reactHooksPlugin from "eslint-plugin-react-hooks";
+import jsxA11yPlugin from "eslint-plugin-jsx-a11y";
 
 export default [
   {
@@ -8,11 +11,22 @@ export default [
       "node_modules/**",
       "coverage/**",
       "dist/**",
+      "playwright-report/**",
+      "test-results/**",
       "next-env.d.ts",
     ],
   },
   {
-    files: ["src/**/*.{ts,tsx}"],
+    plugins: {
+      "@next/next": nextPlugin,
+    },
+    rules: {
+      ...nextPlugin.configs.recommended.rules,
+      ...nextPlugin.configs["core-web-vitals"].rules,
+    },
+  },
+  {
+    files: ["src/**/*.{ts,tsx}", "e2e/**/*.ts"],
     languageOptions: {
       parser: tsParser,
       parserOptions: {
@@ -23,8 +37,13 @@ export default [
     },
     plugins: {
       "@typescript-eslint": tsPlugin,
+      "react-hooks": reactHooksPlugin,
+      "jsx-a11y": jsxA11yPlugin,
     },
     rules: {
+      ...jsxA11yPlugin.flatConfigs.recommended.rules,
+      "react-hooks/rules-of-hooks": "error",
+      "react-hooks/exhaustive-deps": "error",
       "@typescript-eslint/no-explicit-any": "error",
       "@typescript-eslint/explicit-module-boundary-types": "off",
       "@typescript-eslint/no-floating-promises": "error",

@@ -3,9 +3,9 @@
 ## Test Strategy
 - **Unit & Kernel Physics (`vitest`)**: Pure deterministic tests for `src/engine/*` verifying piecewise interpolation, inter-bracket monotonicity, hygroscopic corrections, mass balance, combustion decay, GRAP stages, and commute exposure deltas.
 - **Service & API Boundary Tests (`vitest`)**: Mocked-HTTP and injected-port tests covering caching, bounded rate limiting, trusted rightmost IP parsing, Zod schema bounds, 413 body limits, sanitized 500 responses, circuit breakers, timeouts, `/api/health`, and Gemini Interactions guardrails.
-- **Component Rendering Tests (`vitest`)**: Server-side `renderToString` and boundary checks for component props, `ErrorBoundary`, and `&le;` entity rendering fix.
-- **End-to-End & Accessibility (`playwright` + `@axe-core/playwright`)**: Full browser flows against Next.js production server (`CI=true`) verifying zero `pageerror`s, strict CSP compatibility, zero-latency slider updates, and zero WCAG violations.
-- **Green Gate**: `npm run typecheck`, `npm run lint`, `npm run format:check`, `npm run test:coverage` (131/131 tests; 94.15% statements / 82.21% branches / 97.11% functions), `npm run build`, and `npm run test:e2e`.
+- **Component & Interactive UI Tests (`vitest`)**: Server-side `renderToString` and interactive `jsdom` / `@testing-library/react` tests covering `VayuShieldHome`, `ErrorBoundary`, keyboard timeline navigation, sliders, clipboard error fallback, and calm Comparative Metrology rendering.
+- **End-to-End & Accessibility (`playwright` + `@axe-core/playwright`)**: Full browser flows against Next.js standalone production server (`CI=true`) verifying zero `pageerror`s, zero `securitypolicyviolation` events, `!x-powered-by`, zero-latency slider updates, and zero WCAG violations across Severe, Satisfactory, and Moderate (EN + HI) states.
+- **Green Gate**: `npm run typecheck`, `npm run lint`, `npm run format:check`, `npm run test:coverage` (153/153 tests across 12 suites; 93.09% statements / 78.36% branches / 96.21% functions / 94.07% lines), `npm run build`, `npm audit --audit-level=moderate`, and `npm run test:e2e`.
 
 ## Safety Net Map
 | Module | Pinned behaviors | Test files | Gaps |
@@ -35,7 +35,7 @@
 - `npm run typecheck`
 - `npm run lint`
 - `npm run format:check`
-- `npm run test:coverage` (covers `src/engine/**/*.ts`, `src/services/**/*.ts`, `src/app/api/**/*.ts`)
+- `npm run test:coverage` (covers `src/engine/`, `src/services/`, `src/app/api/`, `src/components/`, `src/hooks/`, `src/i18n/`, `src/middleware.ts`, and `src/app/page.tsx`)
 - `npm run build`
-- `npm run test:e2e` (runs against production `npm run start` in CI)
-- `npm audit --audit-level=high`
+- `npm run test:e2e` (runs against standalone server via `npm run start:standalone` in CI)
+- `npm audit --audit-level=moderate`

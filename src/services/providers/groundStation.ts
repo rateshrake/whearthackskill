@@ -8,9 +8,9 @@
  */
 
 import { calculateCpcbAqi } from "@/engine";
-import { CACHE_TTL_MS, globalStationCache } from "../gridCache";
-import { fetchWithResilience } from "../resilientHttp";
-import { MANDATORY_ATTRIBUTIONS } from "../airQualityAggregator";
+import { CACHE_TTL_MS, globalStationCache, quantizeCoordinates } from "../gridCache";
+import { fetchWithResilience, redactSecrets } from "../resilientHttp";
+import { MANDATORY_ATTRIBUTIONS } from "../attributions";
 
 export interface GroundStationCheck {
   stationName: string;
@@ -63,15 +63,6 @@ export function classifyStationSkew(
   };
 }
 
-function isRawStationReading(value: unknown): value is RawStationReading {
-  return (
-    value !== null &&
-    typeof value === "object" &&
-    "source" in value &&
-    "stationPm25" in value
-  );
-}
-
 /**
  * Fetches nearest ground station reading (cached by 0.01° grid for 30 minutes).
  */
@@ -79,9 +70,9 @@ export async function fetchRawGroundStation(
   lat: number,
   lon: number,
 ): Promise<RawStationReading | null> {
-  const cacheKey = `station:${lat.toFixed(2)},${lon.toFixed(2)}`;
+  const { gridKey: cacheKey } = quantizeCoordinates(lat, lon, "station");
   const cached = globalStationCache.get(cacheKey);
-  if (isRawStationReading(cached)) {
+  if (cached) {
     return cached;
   }
 
@@ -131,8 +122,11 @@ export async function fetchRawGroundStation(
           return reading;
         }
       }
-    } catch {
-      // Fall through to OpenAQ
+    } catch (err: unknown) {
+      console.warn(
+        "[groundStation] WAQI lookup failed, falling back to OpenAQ:",
+        redactSecrets(err instanceof Error ? err.message : String(err)),
+      );
     }
   }
 
@@ -174,7 +168,12 @@ export async function fetchRawGroundStation(
               : undefined;
 
           // Real OpenAQ v3 /locations omits latest sensor measurements; fetch /latest when available
-          if (stationPm25 === undefined && typeof loc.id === "number") {
+          if (
+            stationPm25 === undefined &&
+            typeof loc.id === "number" &&
+            Number.isInteger(loc.id) &&
+            loc.id > 0
+          ) {
             const latestRes = await fetchWithResilience(
               `https://api.openaq.org/v3/locations/${loc.id}/latest`,
               {
@@ -214,8 +213,11 @@ export async function fetchRawGroundStation(
           }
         }
       }
-    } catch {
-      // Fall through cleanly
+    } catch (err: unknown) {
+      console.warn(
+        "[groundStation] OpenAQ lookup failed:",
+        redactSecrets(err instanceof Error ? err.message : String(err)),
+      );
     }
   }
 
